@@ -182,63 +182,109 @@ extension ChatControllerImpl {
                                 }
                                 self.navigationActionDisposable.set((peerSignal |> take(1) |> deliverOnMainQueue).startStrict(next: { [weak self] peer in
                                     if let strongSelf = self, let peer = peer {
-                                        var mode: PeerInfoControllerMode = .generic
-                                        if let messageId = fromMessage?.id, chatPeerId != nil {
-                                            mode = .group(sourceMessageId: messageId)
-                                        }
-                                        if let fromReactionMessageId = fromReactionMessageId {
-                                            mode = .reaction(fromReactionMessageId)
-                                        }
-                                        if case let .info(params) = navigation, let params {
-                                            if params.switchToRecommendedChannels {
-                                                mode = .recommendedChannels
-                                            } else if params.switchToGroupsInCommon {
-                                                mode = .groupsInCommon
+                                        let openPeerInfoImpl: () -> Void = { [weak strongSelf] in
+                                            guard let strongSelf else {
+                                                return
+                                            }
+                                            var mode: PeerInfoControllerMode = .generic
+                                            if let messageId = fromMessage?.id, chatPeerId != nil {
+                                                mode = .group(sourceMessageId: messageId)
+                                            }
+                                            if let fromReactionMessageId = fromReactionMessageId {
+                                                mode = .reaction(fromReactionMessageId)
+                                            }
+                                            if case let .info(params) = navigation, let params {
+                                                if params.switchToRecommendedChannels {
+                                                    mode = .recommendedChannels
+                                                } else if params.switchToGroupsInCommon {
+                                                    mode = .groupsInCommon
+                                                }
+                                            }
+                                            if peer.id == strongSelf.context.account.peerId {
+                                                mode = .myProfile
+                                            }
+                                            var expandAvatar = expandAvatar
+                                            if peer.smallProfileImage == nil {
+                                                expandAvatar = false
+                                            }
+                                            if let validLayout = strongSelf.validLayout, validLayout.deviceMetrics.type == .tablet {
+                                                expandAvatar = false
+                                            }
+                                            if let infoController = strongSelf.context.sharedContext.makePeerInfoController(context: strongSelf.context, updatedPresentationData: strongSelf.updatedPresentationData, peer: peer, mode: mode, avatarInitiallyExpanded: expandAvatar, fromChat: false, requestsContext: nil) {
+                                                strongSelf.effectiveNavigationController?.pushViewController(infoController)
                                             }
                                         }
-                                        if peer.id == strongSelf.context.account.peerId {
-                                            mode = .myProfile
-                                        }
-                                        var expandAvatar = expandAvatar
-                                        if peer.smallProfileImage == nil {
-                                            expandAvatar = false
-                                        }
-                                        if let validLayout = strongSelf.validLayout, validLayout.deviceMetrics.type == .tablet {
-                                            expandAvatar = false
-                                        }
-                                        if let infoController = strongSelf.context.sharedContext.makePeerInfoController(context: strongSelf.context, updatedPresentationData: strongSelf.updatedPresentationData, peer: peer, mode: mode, avatarInitiallyExpanded: expandAvatar, fromChat: false, requestsContext: nil) {
-                                            strongSelf.effectiveNavigationController?.pushViewController(infoController)
+
+                                        if let chatPeerId, case .user = peer {
+                                            let _ = (safeLinkCanOpenPrivateChatFromGroup(context: strongSelf.context, groupPeerId: chatPeerId, targetPeerId: peer.id)
+                                            |> take(1)
+                                            |> deliverOnMainQueue).startStandalone(next: { [weak strongSelf] allowed in
+                                                guard let strongSelf else {
+                                                    return
+                                                }
+                                                if allowed {
+                                                    openPeerInfoImpl()
+                                                } else {
+                                                    strongSelf.playShakeAnimation()
+                                                    safeLinkDisplayPrivateChatForbidden(controller: strongSelf, presentationData: strongSelf.presentationData)
+                                                }
+                                            })
+                                        } else {
+                                            openPeerInfoImpl()
                                         }
                                     }
                                 }))
                             case let .chat(textInputState, subject, peekData):
-                                if let textInputState = textInputState {
-                                    let _ = (ChatInterfaceState.update(engine: self.context.engine, peerId: peer.id, threadId: nil, { currentState in
-                                        return currentState.withUpdatedComposeInputState(textInputState)
-                                    })
-                                    |> deliverOnMainQueue).startStandalone(completed: { [weak self] in
-                                        if let strongSelf = self, let navigationController = strongSelf.effectiveNavigationController {
-                                            strongSelf.context.sharedContext.navigateToChatController(NavigateToChatControllerParams(navigationController: navigationController, context: strongSelf.context, chatLocation: .peer(peer), subject: subject, updateTextInputState: textInputState, peekData: peekData))
-                                        }
-                                    })
-                                } else {
-                                    let _ = (requireAgeVerification(context: self.context, peer: peer)
-                                    |> deliverOnMainQueue).start(next: { [weak self] require in
+                                let openChatImpl: () -> Void = { [weak self] in
+                                    guard let self else {
+                                        return
+                                    }
+                                    if let textInputState = textInputState {
+                                        let _ = (ChatInterfaceState.update(engine: self.context.engine, peerId: peer.id, threadId: nil, { currentState in
+                                            return currentState.withUpdatedComposeInputState(textInputState)
+                                        })
+                                        |> deliverOnMainQueue).startStandalone(completed: { [weak self] in
+                                            if let strongSelf = self, let navigationController = strongSelf.effectiveNavigationController {
+                                                strongSelf.context.sharedContext.navigateToChatController(NavigateToChatControllerParams(navigationController: navigationController, context: strongSelf.context, chatLocation: .peer(peer), subject: subject, updateTextInputState: textInputState, peekData: peekData))
+                                            }
+                                        })
+                                    } else {
+                                        let _ = (requireAgeVerification(context: self.context, peer: peer)
+                                        |> deliverOnMainQueue).start(next: { [weak self] require in
+                                            guard let self else {
+                                                return
+                                            }
+                                            if require && !skipAgeVerification {
+                                                presentAgeVerification(context: self.context, parentController: self, completion: {
+                                                    self.openPeer(peer: peer, navigation: navigation, fromMessage: fromMessage, fromReactionMessageId: fromReactionMessageId, expandAvatar: expandAvatar, peerTypes: peerTypes)
+                                                })
+                                            } else {
+                                                if case let .channel(channel) = peer, channel.isForumOrMonoForum {
+                                                    self.effectiveNavigationController?.pushViewController(ChatListControllerImpl(context: self.context, location: .forum(peerId: channel.id), controlsHistoryPreload: false, enableDebugActions: false))
+                                                } else {
+                                                    self.effectiveNavigationController?.pushViewController(ChatControllerImpl(context: self.context, chatLocation: .peer(id: peer.id), subject: subject))
+                                                }
+                                            }
+                                        })
+                                    }
+                                }
+
+                                if let chatPeerId, case .user = peer {
+                                    let _ = (safeLinkCanOpenPrivateChatFromGroup(context: self.context, groupPeerId: chatPeerId, targetPeerId: peer.id)
+                                    |> take(1)
+                                    |> deliverOnMainQueue).startStandalone(next: { [weak self] allowed in
                                         guard let self else {
                                             return
                                         }
-                                        if require && !skipAgeVerification {
-                                            presentAgeVerification(context: self.context, parentController: self, completion: {
-                                                self.openPeer(peer: peer, navigation: navigation, fromMessage: fromMessage, fromReactionMessageId: fromReactionMessageId, expandAvatar: expandAvatar, peerTypes: peerTypes)
-                                            })
+                                        if allowed {
+                                            openChatImpl()
                                         } else {
-                                            if case let .channel(channel) = peer, channel.isForumOrMonoForum {
-                                                self.effectiveNavigationController?.pushViewController(ChatListControllerImpl(context: self.context, location: .forum(peerId: channel.id), controlsHistoryPreload: false, enableDebugActions: false))
-                                            } else {
-                                                self.effectiveNavigationController?.pushViewController(ChatControllerImpl(context: self.context, chatLocation: .peer(id: peer.id), subject: subject))
-                                            }
+                                            self.playShakeAnimation()
+                                            safeLinkDisplayPrivateChatForbidden(controller: self, presentationData: self.presentationData)
                                         }
                                     })
+                                } else {
+                                    openChatImpl()
                                 }
                             case let .withBotStartPayload(botStart):
                                 self.effectiveNavigationController?.pushViewController(ChatControllerImpl(context: self.context, chatLocation: .peer(id: peer.id), botStart: botStart))

@@ -848,6 +848,12 @@ func infoItems(
         
         for member in memberList {
             let isAccountPeer = member.id == context.account.peerId
+            let privateChatBlocked: Bool
+            if case let .channel(channel) = peer, case .group = channel.info, member.id != context.account.peerId, safeLinkGroupPrivateChatForbiddenCached(accountPeerId: context.account.peerId, peerId: channel.id), !safeLinkCurrentUserCanBypassGroupPrivateChatForbidden(peer), member.role == .member {
+                privateChatBlocked = true
+            } else {
+                privateChatBlocked = false
+            }
             items[.peerMembers]!.append(PeerInfoScreenMemberItem(id: member.id, context: .account(context), enclosingPeer: peer, member: member, isAccount: false, action: isAccountPeer ? { _ in
                 let actions = availableActionsForMemberOfPeer(accountPeerId: context.account.peerId, peer: peer, member: member)
                 if actions.contains(.editRank) {
@@ -856,7 +862,11 @@ func infoItems(
             } : { action in
                 switch action {
                 case .open:
-                    interaction.openPeerInfo(member.peer, true)
+                    if privateChatBlocked {
+                        safeLinkDisplayPrivateChatForbidden(controller: interaction.getController(), presentationData: presentationData)
+                    } else {
+                        interaction.openPeerInfo(member.peer, true)
+                    }
                 case .promote:
                     interaction.performMemberAction(member, .promote)
                 case .restrict:
@@ -865,7 +875,11 @@ func infoItems(
                     interaction.performMemberAction(member, .remove)
                 }
             }, contextAction: { node, gesture in
-                interaction.openMemberContextMenu(member, node, gesture)
+                if privateChatBlocked {
+                    safeLinkDisplayPrivateChatForbidden(controller: interaction.getController(), presentationData: presentationData)
+                } else {
+                    interaction.openMemberContextMenu(member, node, gesture)
+                }
             }, openStories: { sourceView in
                 interaction.performMemberAction(member, .openStories(sourceView: sourceView))
             }))
@@ -1319,6 +1333,7 @@ func editingItems(data: PeerInfoScreenData?, boostStatus: ChannelBoostStatus?, s
                 let ItemTopics = 117
                 let ItemTopicsText = 118
                 let ItemAppearance = 119
+                let ItemPrivateChatForbidden = 120
                 
                 let isCreator = channel.flags.contains(.isCreator)
                 let isPublic = channel.addressName != nil
@@ -1523,6 +1538,16 @@ func editingItems(data: PeerInfoScreenData?, boostStatus: ChannelBoostStatus?, s
                             }))
                         }
                         
+                        if isCreator || channel.adminRights?.rights.contains(.canChangeInfo) == true {
+                            items[.peerSettings]!.append(PeerInfoScreenSwitchItem(id: ItemPrivateChatForbidden, text: "禁止私聊", value: safeLinkGroupPrivateChatForbiddenCached(accountPeerId: context.account.peerId, peerId: channel.id), icon: PresentationResourcesSettings.block, toggled: { value in
+                                let _ = (safeLinkSetGroupPrivateChatForbidden(account: context.account, peerId: channel.id, enabled: value)
+                                |> deliverOnMainQueue).startStandalone(next: { _ in
+                                    interaction.requestLayout(true)
+                                })
+                                interaction.requestLayout(true)
+                            }))
+                        }
+
                         items[.peerSettings]!.append(PeerInfoScreenDisclosureItem(id: ItemAdmins, label: .text(cachedData.participantsSummary.adminCount.flatMap { "\(presentationStringsFormattedNumber($0, presentationData.dateTimeFormat.groupingSeparator))" } ?? ""), text: presentationData.strings.GroupInfo_Administrators, icon: PresentationResourcesSettings.admins, action: {
                             interaction.openParticipantsSection(.admins)
                         }))

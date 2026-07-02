@@ -381,6 +381,9 @@ public final class AccountViewTracker {
                     strongSelf.forceUpdateCachedPeerData(peerId: peerId)
                 }
             }
+            for peerId in peerIds {
+                strongSelf.refreshSafeLinkGroupPrivateChatForbidden(peerId: peerId)
+            }
         }))
     }
     
@@ -396,6 +399,24 @@ public final class AccountViewTracker {
         self.queue.async {
             self.cachedDataContexts.removeAll()
         }
+    }
+
+    private func refreshSafeLinkGroupPrivateChatForbidden(peerId: PeerId) {
+        guard peerId.namespace == Namespaces.Peer.CloudChannel, let account = self.account else {
+            return
+        }
+        let _ = (account.postbox.transaction { transaction -> Bool in
+            guard let channel = transaction.getPeer(peerId) as? TelegramChannel, case .group = channel.info else {
+                return false
+            }
+            return true
+        }
+        |> mapToSignal { isGroup -> Signal<Bool, NoError> in
+            if !isGroup {
+                return .single(false)
+            }
+            return safeLinkLoadGroupPrivateChatForbidden(account: account, peerId: peerId)
+        }).start()
     }
     
     private func updatePendingWebpages(viewId: Int32, threadId: Int64?, messageIds: Set<MessageId>, localWebpages: [MessageId: (MediaId, String)]) {

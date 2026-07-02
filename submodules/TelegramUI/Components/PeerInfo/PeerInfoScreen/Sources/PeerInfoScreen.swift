@@ -257,6 +257,8 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
     let hiddenAvatarRepresentationDisposable = MetaDisposable()
     
     var autoTranslateDisposable: Disposable?
+    let privateChatForbiddenDisposable = MetaDisposable()
+    var privateChatForbiddenLoadedPeerId: PeerId?
     
     var resolvePeerByNameDisposable: MetaDisposable?
     let navigationActionDisposable = MetaDisposable()
@@ -2680,6 +2682,7 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
         self.boostStatusDisposable?.dispose()
         self.personalChannelsDisposable?.dispose()
         self.autoTranslateDisposable?.dispose()
+        self.privateChatForbiddenDisposable.dispose()
     }
     
     override func didLoad() {
@@ -2737,6 +2740,23 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
             }
         }
         self.data = data
+
+        if case let .channel(channel) = data.peer, case .group = channel.info {
+            if self.privateChatForbiddenLoadedPeerId != channel.id {
+                self.privateChatForbiddenLoadedPeerId = channel.id
+                self.privateChatForbiddenDisposable.set((safeLinkLoadGroupPrivateChatForbidden(account: self.context.account, peerId: channel.id)
+                |> deliverOnMainQueue).startStrict(next: { [weak self] _ in
+                    guard let self, let (layout, navigationHeight) = self.validLayout else {
+                        return
+                    }
+                    self.containerLayoutUpdated(layout: layout, navigationHeight: navigationHeight, transition: .immediate)
+                }))
+            }
+        } else {
+            self.privateChatForbiddenLoadedPeerId = nil
+            self.privateChatForbiddenDisposable.set(nil)
+        }
+
         if previousData?.members?.membersContext !== data.members?.membersContext {
             if let peer = data.peer, let _ = data.members {
                 self.groupMembersSearchContext = GroupMembersSearchContext(context: self.context, peerId: peer.id)
@@ -4297,9 +4317,31 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
     }
         
     private func openPeerInfo(peer: EnginePeer, isMember: Bool) {
-        let mode: PeerInfoControllerMode = .generic
-        if let infoController = self.context.sharedContext.makePeerInfoController(context: self.context, updatedPresentationData: nil, peer: peer, mode: mode, avatarInitiallyExpanded: false, fromChat: false, requestsContext: nil) {
-            (self.controller?.navigationController as? NavigationController)?.pushViewController(infoController)
+        let openImpl: () -> Void = { [weak self] in
+            guard let self else {
+                return
+            }
+            let mode: PeerInfoControllerMode = .generic
+            if let infoController = self.context.sharedContext.makePeerInfoController(context: self.context, updatedPresentationData: nil, peer: peer, mode: mode, avatarInitiallyExpanded: false, fromChat: false, requestsContext: nil) {
+                (self.controller?.navigationController as? NavigationController)?.pushViewController(infoController)
+            }
+        }
+
+        if isMember, case .user = peer {
+            self.navigationActionDisposable.set((safeLinkCanOpenPrivateChatFromGroup(context: self.context, groupPeerId: self.peerId, targetPeerId: peer.id)
+            |> take(1)
+            |> deliverOnMainQueue).startStrict(next: { [weak self] allowed in
+                guard let self else {
+                    return
+                }
+                if allowed {
+                    openImpl()
+                } else {
+                    safeLinkDisplayPrivateChatForbidden(controller: self.controller, presentationData: self.presentationData)
+                }
+            }))
+        } else {
+            openImpl()
         }
     }
     

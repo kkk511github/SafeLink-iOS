@@ -14,15 +14,26 @@ public func searchPeerMembers(context: AccountContext, peerId: EnginePeer.Id, ch
     let transformedQuery = postboxTransformedString(normalizedQuery as NSString, true, false) ?? normalizedQuery
     
     if peerId.namespace == Namespaces.Peer.CloudChannel {
-        return context.engine.data.get(
-            TelegramEngine.EngineData.Item.Peer.ParticipantCount(id: peerId)
+        return combineLatest(
+            context.engine.data.get(TelegramEngine.EngineData.Item.Peer.ParticipantCount(id: peerId)),
+            context.engine.data.get(TelegramEngine.EngineData.Item.Peer.Peer(id: peerId))
         )
-        |> mapToSignal { participantCount -> Signal<([EnginePeer], Bool), NoError> in
+        |> mapToSignal { participantCount, peer -> Signal<([EnginePeer], Bool), NoError> in
+            let shouldRestrictMentions: Bool
+            if case .mention = scope, safeLinkGroupPrivateChatForbiddenCached(accountPeerId: context.account.peerId, peerId: peerId), !safeLinkCurrentUserCanBypassGroupPrivateChatForbidden(peer) {
+                shouldRestrictMentions = true
+            } else {
+                shouldRestrictMentions = false
+            }
+
             if case .peer = chatLocation, let memberCount = participantCount, memberCount <= 64 {
                 return Signal { subscriber in
                     let (disposable, _) = context.peerChannelMemberCategoriesContextsManager.recent(engine: context.engine, accountPeerId: context.account.peerId, peerId: peerId, searchQuery: nil, requestUpdate: false, updated: { state in
                         if case .ready = state.loadingState {
                             subscriber.putNext((state.list.compactMap { participant -> EnginePeer? in
+                                if shouldRestrictMentions && !safeLinkChannelParticipantCanBeContacted(participant.participant) {
+                                    return nil
+                                }
                                 if participant.peer.isDeleted {
                                     return nil
                                 }
@@ -55,6 +66,9 @@ public func searchPeerMembers(context: AccountContext, peerId: EnginePeer.Id, ch
                     let (disposable, _) = context.peerChannelMemberCategoriesContextsManager.recent(engine: context.engine, accountPeerId: context.account.peerId, peerId: peerId, searchQuery: normalizedQuery.isEmpty ? nil : normalizedQuery, updated: { state in
                         if case .ready = state.loadingState {
                             subscriber.putNext((state.list.compactMap { participant in
+                                if shouldRestrictMentions && !safeLinkChannelParticipantCanBeContacted(participant.participant) {
+                                    return nil
+                                }
                                 if participant.peer.isDeleted {
                                     return nil
                                 }
@@ -70,6 +84,9 @@ public func searchPeerMembers(context: AccountContext, peerId: EnginePeer.Id, ch
                     let (disposable, _) = context.peerChannelMemberCategoriesContextsManager.mentions(engine: context.engine, accountPeerId: context.account.peerId, peerId: peerId, threadMessageId: EngineMessage.Id(peerId: replyThreadMessage.peerId, namespace: Namespaces.Message.Cloud, id: Int32(clamping: replyThreadMessage.threadId)), searchQuery: normalizedQuery.isEmpty ? nil : normalizedQuery, updated: { state in
                         if case .ready = state.loadingState {
                             subscriber.putNext((state.list.compactMap { participant in
+                                if shouldRestrictMentions && !safeLinkChannelParticipantCanBeContacted(participant.participant) {
+                                    return nil
+                                }
                                 if participant.peer.isDeleted {
                                     return nil
                                 }
