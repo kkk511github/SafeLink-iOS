@@ -920,6 +920,13 @@ final class BrowserWebContent: UIView, BrowserContent, WKNavigationDelegate, WKU
             self.ignoreUpdatesUntilScrollingStopped = true
         }
     }
+
+    private func isAppNavigationUrl(_ url: String) -> Bool {
+        guard let scheme = URL(string: url)?.scheme?.lowercased() else {
+            return false
+        }
+        return scheme == "tg" || scheme == "safelink" || scheme == self.context.sharedContext.applicationBindings.appSpecificScheme.lowercased()
+    }
         
     @available(iOS 13.0, *)
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, preferences: WKWebpagePreferences, decisionHandler: @escaping (WKNavigationActionPolicy, WKWebpagePreferences) -> Void) {
@@ -937,7 +944,7 @@ final class BrowserWebContent: UIView, BrowserContent, WKNavigationDelegate, WKU
             }
         } else {
             if let url = navigationAction.request.url?.absoluteString {
-                if (navigationAction.targetFrame == nil || navigationAction.targetFrame?.isMainFrame == true) && (isTelegramMeLink(url) || url.hasPrefix("tg://")) && !url.contains("/auth/push?") && !self._state.url.contains("/auth/push?") {
+                if (navigationAction.targetFrame == nil || navigationAction.targetFrame?.isMainFrame == true) && (isTelegramMeLink(url) || self.isAppNavigationUrl(url)) && !url.contains("/auth/push?") && !self._state.url.contains("/auth/push?") {
                     decisionHandler(.cancel, preferences)
                     if !url.contains("domain=oauth") {
                         self.minimize()
@@ -987,7 +994,7 @@ final class BrowserWebContent: UIView, BrowserContent, WKNavigationDelegate, WKU
     
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
         if let url = navigationAction.request.url?.absoluteString {
-            if (navigationAction.targetFrame == nil || navigationAction.targetFrame?.isMainFrame == true) && (isTelegramMeLink(url) || isTelegraPhLink(url) || url.hasPrefix("tg://")) {
+            if (navigationAction.targetFrame == nil || navigationAction.targetFrame?.isMainFrame == true) && (isTelegramMeLink(url) || isTelegraPhLink(url) || self.isAppNavigationUrl(url)) {
                 decisionHandler(.cancel)
                 self.minimize()
                 self.openAppUrl(url)
@@ -1380,7 +1387,7 @@ final class BrowserWebContent: UIView, BrowserContent, WKNavigationDelegate, WKU
     func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
         if navigationAction.targetFrame == nil {
             if let url = navigationAction.request.url?.absoluteString {
-                if isTelegramMeLink(url) || isTelegraPhLink(url) || url.hasPrefix("tg://") {
+                if isTelegramMeLink(url) || isTelegraPhLink(url) || self.isAppNavigationUrl(url) {
                     self.minimize()
                     self.openAppUrl(url)
                 } else {
