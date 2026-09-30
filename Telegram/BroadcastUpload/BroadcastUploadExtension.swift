@@ -11,7 +11,7 @@ import CoreMedia
 import AVFoundation
 
 private func rootPathForBasePath(_ appGroupPath: String) -> String {
-    return appGroupPath + "/telegram-data"
+    return appGroupPath + "/safelink-data-v1"
 }
 
 private protocol BroadcastUploadImpl: AnyObject {

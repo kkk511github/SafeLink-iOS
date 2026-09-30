@@ -165,6 +165,9 @@ extension ChatControllerImpl {
                 if let peer = peer {
                     do {
                         var chatPeerId: EnginePeer.Id?
+                        if let locationPeerId = self.chatLocation.peerId, locationPeerId.namespace == Namespaces.Peer.CloudChannel {
+                            chatPeerId = locationPeerId
+                        }
                         if let peer = self.presentationInterfaceState.renderedPeer?.chatMainPeer as? TelegramGroup {
                             chatPeerId = peer.id
                         } else if let peer = self.presentationInterfaceState.renderedPeer?.chatMainPeer as? TelegramChannel, case .group = peer.info, case .member = peer.participationStatus {
@@ -222,11 +225,10 @@ extension ChatControllerImpl {
                                                 guard let strongSelf else {
                                                     return
                                                 }
-                                                if allowed {
+                                                if allowed == true {
                                                     openPeerInfoImpl()
                                                 } else {
-                                                    strongSelf.playShakeAnimation()
-                                                    safeLinkDisplayPrivateChatForbidden(controller: strongSelf, presentationData: strongSelf.presentationData)
+                                                    safeLinkDisplayPrivateChatForbidden(controller: strongSelf, presentationData: strongSelf.presentationData, unavailable: allowed == nil)
                                                 }
                                             })
                                         } else {
@@ -276,11 +278,10 @@ extension ChatControllerImpl {
                                         guard let self else {
                                             return
                                         }
-                                        if allowed {
+                                        if allowed == true {
                                             openChatImpl()
                                         } else {
-                                            self.playShakeAnimation()
-                                            safeLinkDisplayPrivateChatForbidden(controller: self, presentationData: self.presentationData)
+                                            safeLinkDisplayPrivateChatForbidden(controller: self, presentationData: self.presentationData, unavailable: allowed == nil)
                                         }
                                     })
                                 } else {

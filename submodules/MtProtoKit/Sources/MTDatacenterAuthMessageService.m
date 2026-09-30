@@ -2,6 +2,7 @@
 
 #import <MtProtoKit/MTLogging.h>
 #import <MtProtoKit/MTContext.h>
+#import <MtProtoKit/MTApiEnvironment.h>
 #import <MtProtoKit/MTProto.h>
 #import <MtProtoKit/MTSerialization.h>
 #import <MtProtoKit/MTSessionInfo.h>
@@ -50,23 +51,23 @@ static NSArray<MTDatacenterAuthPublicKey *> *defaultPublicKeys(bool isProduction
     dispatch_once(&onceToken, ^{
         testingPublicKeys = @[
             [[MTDatacenterAuthPublicKey alloc] initWithPublicKey:@"-----BEGIN RSA PUBLIC KEY-----\n"
-             "MIIBCgKCAQEA5HwU3vuVCHBiQk6KYznU8YuaCABYUtQlq5XbHA07DS+LOrnsZ4zF\n"
-             "d3uz8B+Tz/ZiZ5LLqoULE+vgPDt4L9uyVgMalYxkVPRoGG+vLGRWzGFfiQNmhNNr\n"
-             "puCxmZJMTnduTGb4dN9x+YynJWYkpOjSyRD7uuzKEadt1iO1iGLxNTyfUYxcTQvA\n"
-             "qoqfy/gvgmQXcK+YSIdiQq237PIyNg3/SKKF8ytbdimy/3ie3W8cYnUkG+m69hYt\n"
-             "lV4ElPMcfQKvFlKkh8IiHLJFV6MKTT8y7V+qYGRRnSbKI6XK5pp8MoB/DsG0N5MN\n"
-             "puBo+D7wAx0SQM48ykUEQ1YNsRrj0A9qowIDAQAB\n"
+             "MIIBCgKCAQEAzmgJTNhh+Rfz1sBBb2htmPUtIJULMB2YRFElh59UbNl7tHe0h73m\n"
+             "4wDxMNWd5R/0TInVrXP1XEGwztIdZ56/xKUsm+VvioP+Ohk4vsYK73eArzx4afs4\n"
+             "Us1eZhLfEdO6ouAjeuE2oMyoyk9BfDI8vhYU6flAZcHHlAfmFbflkdXvHEqm+PHW\n"
+             "76CSmQDJ9yhNoy41cVPvCLw5UKbgu8c/xdIpIIGEk01BJjtCNbiLJKRLjUIFVIlv\n"
+             "nsSnrnQwou4I2p90PWjqAQODKiRMscrgYRXj4GO8W9zVibf1ZPzWznmRZVWERWm9\n"
+             "Q0XxobndWXPc8Ei4Y2LAp7uA8/iL94nN/wIDAQAB\n"
              "-----END RSA PUBLIC KEY-----"]
         ];
 
         productionPublicKeys = @[
             [[MTDatacenterAuthPublicKey alloc] initWithPublicKey:@"-----BEGIN RSA PUBLIC KEY-----\n"
-             "MIIBCgKCAQEA5HwU3vuVCHBiQk6KYznU8YuaCABYUtQlq5XbHA07DS+LOrnsZ4zF\n"
-             "d3uz8B+Tz/ZiZ5LLqoULE+vgPDt4L9uyVgMalYxkVPRoGG+vLGRWzGFfiQNmhNNr\n"
-             "puCxmZJMTnduTGb4dN9x+YynJWYkpOjSyRD7uuzKEadt1iO1iGLxNTyfUYxcTQvA\n"
-             "qoqfy/gvgmQXcK+YSIdiQq237PIyNg3/SKKF8ytbdimy/3ie3W8cYnUkG+m69hYt\n"
-             "lV4ElPMcfQKvFlKkh8IiHLJFV6MKTT8y7V+qYGRRnSbKI6XK5pp8MoB/DsG0N5MN\n"
-             "puBo+D7wAx0SQM48ykUEQ1YNsRrj0A9qowIDAQAB\n"
+             "MIIBCgKCAQEAzmgJTNhh+Rfz1sBBb2htmPUtIJULMB2YRFElh59UbNl7tHe0h73m\n"
+             "4wDxMNWd5R/0TInVrXP1XEGwztIdZ56/xKUsm+VvioP+Ohk4vsYK73eArzx4afs4\n"
+             "Us1eZhLfEdO6ouAjeuE2oMyoyk9BfDI8vhYU6flAZcHHlAfmFbflkdXvHEqm+PHW\n"
+             "76CSmQDJ9yhNoy41cVPvCLw5UKbgu8c/xdIpIIGEk01BJjtCNbiLJKRLjUIFVIlv\n"
+             "nsSnrnQwou4I2p90PWjqAQODKiRMscrgYRXj4GO8W9zVibf1ZPzWznmRZVWERWm9\n"
+             "Q0XxobndWXPc8Ei4Y2LAp7uA8/iL94nN/wIDAQAB\n"
              "-----END RSA PUBLIC KEY-----"]
         ];
     });
@@ -178,7 +179,8 @@ typedef enum {
             _stage = MTDatacenterAuthStagePQ;
         }
     } else {
-        _publicKeys = defaultPublicKeys(!mtProto.context.isTestingEnvironment);
+        NSString *instanceKey = mtProto.context.apiEnvironment.safeLinkPublicKey;
+        _publicKeys = instanceKey != nil ? @[[[MTDatacenterAuthPublicKey alloc] initWithPublicKey:instanceKey]] : defaultPublicKeys(!mtProto.context.isTestingEnvironment);
         _stage = MTDatacenterAuthStagePQ;
     }
     

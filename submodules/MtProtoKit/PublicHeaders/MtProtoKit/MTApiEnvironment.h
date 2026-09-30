@@ -71,6 +71,7 @@
 @property (nonatomic) bool disableUpdates;
 @property (nonatomic) NSData * _Nullable tcpPayloadPrefix;
 @property (nonatomic) NSDictionary * _Nullable datacenterAddressOverrides;
+@property (nonatomic, copy) NSString * _Nullable safeLinkPublicKey;
 @property (nonatomic) NSString * _Nullable accessHostOverride;
 
 @property (nonatomic, strong, readonly) MTSocksProxySettings * _Nullable socksProxySettings;

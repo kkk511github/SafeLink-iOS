@@ -53,6 +53,7 @@ public class ItemListDisclosureItem: ListViewItem, ItemListItem, ListItemCompone
     let icon: UIImage?
     let context: AccountContext?
     let iconPeer: EnginePeer?
+    let displaySavedMessagesIcon: Bool
     let title: String
     let attributedTitle: NSAttributedString?
     let titleColor: ItemListDisclosureItemTitleColor
@@ -80,6 +81,7 @@ public class ItemListDisclosureItem: ListViewItem, ItemListItem, ListItemCompone
         icon: UIImage? = nil,
         context: AccountContext? = nil,
         iconPeer: EnginePeer? = nil,
+        displaySavedMessagesIcon: Bool = true,
         title: String,
         attributedTitle: NSAttributedString? = nil,
         enabled: Bool = true,
@@ -106,6 +108,7 @@ public class ItemListDisclosureItem: ListViewItem, ItemListItem, ListItemCompone
         self.icon = icon
         self.context = context
         self.iconPeer = iconPeer
+        self.displaySavedMessagesIcon = displaySavedMessagesIcon
         self.title = title
         self.attributedTitle = attributedTitle
         self.titleColor = titleColor
@@ -181,6 +184,9 @@ public class ItemListDisclosureItem: ListViewItem, ItemListItem, ListItemCompone
             return false
         }
         if lhs.context !== rhs.context {
+            return false
+        }
+        if lhs.iconPeer != rhs.iconPeer || lhs.displaySavedMessagesIcon != rhs.displaySavedMessagesIcon {
             return false
         }
         if lhs.title != rhs.title {
@@ -626,7 +632,7 @@ public class ItemListDisclosureItemNode: ListViewItemNode, ItemListItemNode {
                             clipStyle = .roundedRect
                         }
                         var overrideImage: AvatarNodeImageOverride?
-                        if iconPeer.id == context.account.peerId {
+                        if item.displaySavedMessagesIcon && iconPeer.id == context.account.peerId {
                             overrideImage = .savedMessagesIcon
                         }
                         avatarNode.setPeer(context: context, theme: item.presentationData.theme, peer: iconPeer, overrideImage: overrideImage, clipStyle: clipStyle)

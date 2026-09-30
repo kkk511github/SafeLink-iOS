@@ -1157,7 +1157,7 @@ func openResolvedUrlImpl(
         case let .shareStory(sessionId):
             dismissInput()
         
-            let rootPath = context.sharedContext.applicationBindings.containerPath + "/telegram-data"
+            let rootPath = context.sharedContext.applicationBindings.containerPath + "/safelink-data-v1"
             let storiesPath = rootPath + "/share/stories/\(sessionId)"
         
             var filePaths: [String] = []

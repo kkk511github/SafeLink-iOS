@@ -143,8 +143,8 @@ public class UnauthorizedAccount {
                             syncContacts = syncContactsValue
                         }
 
-                        if let futureAuthToken = futureAuthToken {
-                            storeFutureLoginToken(accountManager: accountManager, token: futureAuthToken.makeData())
+                        if let futureAuthToken = futureAuthToken, let self {
+                            storeFutureLoginToken(accountManager: accountManager, token: futureAuthToken.makeData(), serverId: self.network.safeLinkServer.serverId)
                         }
 
                         let user = TelegramUser(user: apiUser)
@@ -254,6 +254,13 @@ public enum AccountResult {
 
 public func accountWithId(accountManager: AccountManager<TelegramAccountManagerTypes>, networkArguments: NetworkInitializationArguments, id: AccountRecordId, encryptionParameters: ValueBoxEncryptionParameters, supplementary: Bool, isSupportUser: Bool, rootPath: String, beginWithTestingEnvironment: Bool, backupData: AccountBackupData?, auxiliaryMethods: AccountAuxiliaryMethods, shouldKeepAutoConnection: Bool = true) -> Signal<AccountResult, NoError> {
     let path = "\(rootPath)/\(accountRecordIdPathName(id))"
+
+    do {
+        try SafeLinkServer.prepareAccount(accountPath: path, hasBackup: backupData != nil)
+    } catch {
+        Logger.shared.log("SafeLinkServer", "Refusing to open account with an invalid server binding")
+        return .never()
+    }
     
     let postbox = openPostbox(
         basePath: path + "/postbox",

@@ -252,7 +252,7 @@ public func initializeAccountManagement() {
 }
 
 public func rootPathForBasePath(_ appGroupPath: String) -> String {
-    return appGroupPath + "/telegram-data"
+    return appGroupPath + "/safelink-data-v1"
 }
 
 public func performAppGroupUpgrades(appGroupPath: String, rootPath: String) {
@@ -262,6 +262,7 @@ public func performAppGroupUpgrades(appGroupPath: String, rootPath: String) {
         if let items = FileManager.default.enumerator(at: URL(fileURLWithPath: appGroupPath), includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles, .skipsSubdirectoryDescendants], errorHandler: nil) {
             let allowedDirectories: [String] = [
                 "telegram-data",
+                "safelink-data-v1",
                 "Library"
             ]
 
@@ -508,7 +509,7 @@ private func cleanupAccount(networkArguments: NetworkInitializationArguments, ac
                     case let .loggedOut(loggedOutData):
                         let futureAuthToken = loggedOutData.futureAuthToken
                         if let futureAuthToken = futureAuthToken {
-                            storeFutureLoginToken(accountManager: accountManager, token: futureAuthToken.makeData())
+                            storeFutureLoginToken(accountManager: accountManager, token: futureAuthToken.makeData(), serverId: account.network.safeLinkServer.serverId)
                         }
                     default:
                         break

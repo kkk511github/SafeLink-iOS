@@ -248,6 +248,8 @@ extension PeerInfoScreenNode {
                     strongSelf.context.sharedContext.beginNewAuth(testingEnvironment: strongSelf.context.account.testingEnvironment)
                 }
             })
+        case .safeLinkServers:
+            push(self.context.sharedContext.makeSafeLinkServersController())
         case .logout:
             if case let .user(user) = self.data?.peer, let phoneNumber = user.phone {
                 if let controller = self.controller, let navigationController = controller.navigationController as? NavigationController {

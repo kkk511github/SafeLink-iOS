@@ -11,6 +11,21 @@ import ContextUI
 
 extension PeerInfoScreenNode {
     func openMemberContextMenu(member: PeerInfoMember, node: ASDisplayNode, gesture: ContextGesture?) {
+        self.navigationActionDisposable.set((safeLinkCanOpenPrivateChatFromGroup(context: self.context, groupPeerId: self.peerId, targetPeerId: member.id)
+        |> take(1)
+        |> deliverOnMainQueue).startStrict(next: { [weak self] allowed in
+            guard let self else {
+                return
+            }
+            if allowed == true {
+                self.openAllowedMemberContextMenu(member: member, node: node, gesture: gesture)
+            } else {
+                safeLinkDisplayPrivateChatForbidden(controller: self.controller, presentationData: self.presentationData, unavailable: allowed == nil)
+            }
+        }))
+    }
+
+    private func openAllowedMemberContextMenu(member: PeerInfoMember, node: ASDisplayNode, gesture: ContextGesture?) {
         guard let controller = self.controller, let enclosingPeer = self.data?.peer else {
             return
         }
@@ -24,7 +39,18 @@ extension PeerInfoScreenNode {
                     guard let self, let navigationController = self.controller?.navigationController as? NavigationController else {
                         return
                     }
-                    self.context.sharedContext.navigateToChatController(NavigateToChatControllerParams(navigationController: navigationController, context: self.context, chatLocation: .peer(member.peer)))
+                    self.navigationActionDisposable.set((safeLinkCanOpenPrivateChatFromGroup(context: self.context, groupPeerId: self.peerId, targetPeerId: member.id)
+                    |> take(1)
+                    |> deliverOnMainQueue).startStrict(next: { [weak self] allowed in
+                        guard let self else {
+                            return
+                        }
+                        if allowed == true {
+                            self.context.sharedContext.navigateToChatController(NavigateToChatControllerParams(navigationController: navigationController, context: self.context, chatLocation: .peer(member.peer)))
+                        } else {
+                            safeLinkDisplayPrivateChatForbidden(controller: self.controller, presentationData: self.presentationData, unavailable: allowed == nil)
+                        }
+                    }))
                 }
             })))
         }

@@ -1613,6 +1613,8 @@ public protocol SharedAccountContext: AnyObject {
         
     func switchToAccount(id: AccountRecordId, fromSettingsController settingsController: ViewController?, withChatListController chatListController: ViewController?)
     func beginNewAuth(testingEnvironment: Bool)
+    func beginNewAuth(server: SafeLinkServer, completion: @escaping (Bool) -> Void)
+    func makeSafeLinkServersController() -> ViewController
 }
 
 public protocol ComposeController: ViewController {

@@ -141,6 +141,7 @@ public final class SharedAccountContextImpl: SharedAccountContext {
     public let applicationBindings: TelegramApplicationBindings
     public let sharedContainerPath: String
     public let basePath: String
+    private let safeLinkAccountRootPath: String
     public let networkArguments: NetworkInitializationArguments
     public let accountManager: AccountManager<TelegramAccountManagerTypes>
     public let appLockContext: AppLockContext
@@ -304,6 +305,7 @@ public final class SharedAccountContextImpl: SharedAccountContext {
         self.applicationBindings = applicationBindings
         self.sharedContainerPath = sharedContainerPath
         self.basePath = basePath
+        self.safeLinkAccountRootPath = rootPath
         self.networkArguments = networkArguments
         self.accountManager = accountManager
         self.navigateToChatImpl = navigateToChat
@@ -715,19 +717,20 @@ public final class SharedAccountContextImpl: SharedAccountContext {
                 struct AccountPeerKey: Hashable {
                     let peerId: PeerId
                     let isTestingEnvironment: Bool
+                    let serverId: String
                 }
                 
                 var existingAccountPeerKeys = Set<AccountPeerKey>()
                 for accountRecord in addedAccounts {
                     if let account = accountRecord.1 {
-                        if existingAccountPeerKeys.contains(AccountPeerKey(peerId: account.peerId, isTestingEnvironment: account.testingEnvironment)) {
+                        if existingAccountPeerKeys.contains(AccountPeerKey(peerId: account.peerId, isTestingEnvironment: account.testingEnvironment, serverId: account.network.safeLinkServer.serverId)) {
                             let _ = accountManager.transaction({ transaction in
                                 transaction.updateRecord(accountRecord.0, { _ in
                                     return nil
                                 })
                             }).start()
                         } else {
-                            existingAccountPeerKeys.insert(AccountPeerKey(peerId: account.peerId, isTestingEnvironment: account.testingEnvironment))
+                            existingAccountPeerKeys.insert(AccountPeerKey(peerId: account.peerId, isTestingEnvironment: account.testingEnvironment, serverId: account.network.safeLinkServer.serverId))
                             if let index = self.activeAccountsValue?.accounts.firstIndex(where: { $0.0 == account.id }) {
                                 self.activeAccountsValue?.accounts.remove(at: index)
                                 self.managedAccountDisposables.set(nil, forKey: account.id)
@@ -1650,34 +1653,20 @@ public final class SharedAccountContextImpl: SharedAccountContext {
             let (primary, activeAccounts, _) = activeAccountsAndInfo
             var appliedApsList: [Signal<Bool?, NoError>] = []
             var appliedVoipList: [Signal<Never, NoError>] = []
-            var activeProductionUserIds = activeAccounts.map({ $0.1 }).filter({ !$0.account.testingEnvironment }).map({ $0.account.peerId.id })
-            var activeTestingUserIds = activeAccounts.map({ $0.1 }).filter({ $0.account.testingEnvironment }).map({ $0.account.peerId.id })
-            
-            let allProductionUserIds = activeProductionUserIds
-            let allTestingUserIds = activeTestingUserIds
-            
-            if !settings.allAccounts {
-                if let primary = primary {
-                    if !primary.account.testingEnvironment {
-                        activeProductionUserIds = [primary.account.peerId.id]
-                        activeTestingUserIds = []
-                    } else {
-                        activeProductionUserIds = []
-                        activeTestingUserIds = [primary.account.peerId.id]
-                    }
-                } else {
-                    activeProductionUserIds = []
-                    activeTestingUserIds = []
-                }
-            }
-            
             for (_, account, _) in activeAccounts {
+                let sameServerAccounts = activeAccounts.map({ $0.1 }).filter {
+                    $0.account.network.safeLinkServer.serverId == account.account.network.safeLinkServer.serverId
+                        && $0.account.testingEnvironment == account.account.testingEnvironment
+                }
+                let otherAccountUserIds = sameServerAccounts.filter {
+                    $0.account.id != account.account.id && (settings.allAccounts || $0.account.id == primary?.account.id)
+                }.map { $0.account.peerId.id }
                 let appliedAps: Signal<Bool, NoError>
                 let appliedVoip: Signal<Never, NoError>
                 
-                if !activeProductionUserIds.contains(account.account.peerId.id) && !activeTestingUserIds.contains(account.account.peerId.id) {
+                if !settings.allAccounts && account.account.id != primary?.account.id {
                     if let apsNotificationToken {
-                        appliedAps = account.engine.accountData.unregisterNotificationToken(token: apsNotificationToken, type: .aps(encrypt: false), otherAccountUserIds: (account.account.testingEnvironment ? allTestingUserIds : allProductionUserIds).filter({ $0 != account.account.peerId.id }))
+                        appliedAps = account.engine.accountData.unregisterNotificationToken(token: apsNotificationToken, type: .aps(encrypt: false), otherAccountUserIds: otherAccountUserIds)
                         |> map { _ -> Bool in
                         }
                         |> then(.single(true))
@@ -1691,11 +1680,11 @@ public final class SharedAccountContextImpl: SharedAccountContext {
                         guard let token = token else {
                             return .complete()
                         }
-                        return account.engine.accountData.unregisterNotificationToken(token: token, type: .voip, otherAccountUserIds: (account.account.testingEnvironment ? allTestingUserIds : allProductionUserIds).filter({ $0 != account.account.peerId.id }))
+                        return account.engine.accountData.unregisterNotificationToken(token: token, type: .voip, otherAccountUserIds: otherAccountUserIds)
                     }
                 } else {
                     if let apsNotificationToken {
-                        appliedAps = account.engine.accountData.registerNotificationToken(token: apsNotificationToken, type: .aps(encrypt: true), sandbox: sandbox, otherAccountUserIds: (account.account.testingEnvironment ? activeTestingUserIds : activeProductionUserIds).filter({ $0 != account.account.peerId.id }), excludeMutedChats: !settings.includeMuted)
+                        appliedAps = account.engine.accountData.registerNotificationToken(token: apsNotificationToken, type: .aps(encrypt: true), sandbox: sandbox, otherAccountUserIds: otherAccountUserIds, excludeMutedChats: !settings.includeMuted)
                     } else {
                         appliedAps = .single(true)
                     }
@@ -1705,7 +1694,7 @@ public final class SharedAccountContextImpl: SharedAccountContext {
                         guard let token = token else {
                             return .complete()
                         }
-                        return account.engine.accountData.registerNotificationToken(token: token, type: .voip, sandbox: sandbox, otherAccountUserIds: (account.account.testingEnvironment ? activeTestingUserIds : activeProductionUserIds).filter({ $0 != account.account.peerId.id }), excludeMutedChats: !settings.includeMuted)
+                        return account.engine.accountData.registerNotificationToken(token: token, type: .voip, sandbox: sandbox, otherAccountUserIds: otherAccountUserIds, excludeMutedChats: !settings.includeMuted)
                         |> ignoreValues
                     }
                 }
@@ -1750,9 +1739,27 @@ public final class SharedAccountContextImpl: SharedAccountContext {
     }
     
     public func beginNewAuth(testingEnvironment: Bool) {
-        let _ = self.accountManager.transaction({ transaction -> Void in
-            let _ = transaction.createAuth([.environment(AccountEnvironmentAttribute(environment: testingEnvironment ? .test : .production))])
-        }).start()
+        let server = self.activeAccountsValue?.primary?.account.network.safeLinkServer ?? .primary
+        self.beginNewAuth(server: server, completion: { _ in })
+    }
+
+    public func beginNewAuth(server: SafeLinkServer, completion: @escaping (Bool) -> Void) {
+        let rootPath = self.safeLinkAccountRootPath
+        guard !rootPath.isEmpty else { completion(false); return }
+        let _ = (self.accountManager.transaction({ transaction -> Bool in
+            guard let record = transaction.createAuth([.environment(AccountEnvironmentAttribute(environment: .production))]) else { return false }
+            do {
+                try server.bind(accountPath: "\(rootPath)/\(accountRecordIdPathName(record.id))")
+                return true
+            } catch {
+                transaction.removeAuth()
+                return false
+            }
+        }) |> deliverOnMainQueue).start(next: completion)
+    }
+
+    public func makeSafeLinkServersController() -> ViewController {
+        return safeLinkServersController(sharedContext: self, rootPath: self.safeLinkAccountRootPath)
     }
     
     public func switchToAccount(id: AccountRecordId, fromSettingsController settingsController: ViewController? = nil, withChatListController chatListController: ViewController? = nil) {

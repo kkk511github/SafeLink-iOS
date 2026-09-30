@@ -41,7 +41,7 @@ class ShareRootController: UIViewController {
                 return
             }
             
-            let rootPath = appGroupUrl.path + "/telegram-data"
+            let rootPath = appGroupUrl.path + "/safelink-data-v1"
             
             let deviceSpecificEncryptionParameters = BuildConfig.deviceSpecificEncryptionParameters(rootPath, baseAppBundleId: baseAppBundleId)
             let encryptionParameters: (Data, Data) = (deviceSpecificEncryptionParameters.key, deviceSpecificEncryptionParameters.salt)

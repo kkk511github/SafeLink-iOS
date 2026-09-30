@@ -20,7 +20,7 @@ public func searchPeerMembers(context: AccountContext, peerId: EnginePeer.Id, ch
         )
         |> mapToSignal { participantCount, peer -> Signal<([EnginePeer], Bool), NoError> in
             let shouldRestrictMentions: Bool
-            if case .mention = scope, safeLinkGroupPrivateChatForbiddenCached(accountPeerId: context.account.peerId, peerId: peerId), !safeLinkCurrentUserCanBypassGroupPrivateChatForbidden(peer) {
+            if case .mention = scope, safeLinkGroupPrivateChatForbiddenCached(accountId: context.account.id, peerId: peerId), !safeLinkCurrentUserCanBypassGroupPrivateChatForbidden(peer) {
                 shouldRestrictMentions = true
             } else {
                 shouldRestrictMentions = false

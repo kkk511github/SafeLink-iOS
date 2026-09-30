@@ -404,7 +404,7 @@ public extension WidgetPresentationData {
 }
 
 private func rootPathForBasePath(_ appGroupPath: String) -> String {
-    return appGroupPath + "/telegram-data"
+    return appGroupPath + "/safelink-data-v1"
 }
 
 public func widgetPresentationDataPath(rootPath: String) -> String {

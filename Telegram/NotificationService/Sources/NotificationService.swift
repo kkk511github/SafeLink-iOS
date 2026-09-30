@@ -43,7 +43,7 @@ private let accountAuxiliaryMethods = AccountAuxiliaryMethods(fetchResource: { a
 })
 
 private func rootPathForBasePath(_ appGroupPath: String) -> String {
-    return appGroupPath + "/telegram-data"
+    return appGroupPath + "/safelink-data-v1"
 }
 
 private let deviceColorSpace: CGColorSpace = {

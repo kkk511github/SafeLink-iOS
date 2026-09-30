@@ -721,13 +721,10 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         |> take(1)
         |> mapToSignal { activeAccountsAndInfo -> Signal<ExportAuthTransferTokenResult, ExportAuthTransferTokenError> in
             let (_, activeAccounts, _) = activeAccountsAndInfo
-            let activeProductionUserIds = activeAccounts.map({ $0.1.account }).filter({ !$0.testingEnvironment }).map({ $0.peerId.id })
-            let activeTestingUserIds = activeAccounts.map({ $0.1.account }).filter({ $0.testingEnvironment }).map({ $0.peerId.id })
-            
-            let allProductionUserIds = activeProductionUserIds
-            let allTestingUserIds = activeTestingUserIds
-            
-            return TelegramEngineUnauthorized(account: account).auth.exportAuthTransferToken(accountManager: sharedContext.accountManager, otherAccountUserIds: account.testingEnvironment ? allTestingUserIds : allProductionUserIds, syncContacts: true)
+            let otherAccountUserIds = activeAccounts.map({ $0.1.account }).filter {
+                $0.testingEnvironment == account.testingEnvironment && $0.network.safeLinkServer.serverId == account.network.safeLinkServer.serverId
+            }.map { $0.peerId.id }
+            return TelegramEngineUnauthorized(account: account).auth.exportAuthTransferToken(accountManager: sharedContext.accountManager, otherAccountUserIds: otherAccountUserIds, syncContacts: true)
         }
         
         self.exportTokenDisposable.set((tokenSignal

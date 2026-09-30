@@ -178,6 +178,7 @@ enum PeerInfoSettingsSection {
     case phoneNumber
     case username
     case addAccount
+    case safeLinkServers
     case logout
     case rememberPassword
     case emojiStatus
@@ -4334,10 +4335,10 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
                 guard let self else {
                     return
                 }
-                if allowed {
+                if allowed == true {
                     openImpl()
                 } else {
-                    safeLinkDisplayPrivateChatForbidden(controller: self.controller, presentationData: self.presentationData)
+                    safeLinkDisplayPrivateChatForbidden(controller: self.controller, presentationData: self.presentationData, unavailable: allowed == nil)
                 }
             }))
         } else {

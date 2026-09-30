@@ -112,6 +112,9 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
     }
     
     func updateNavigationItems() {
+        if !self.inProgress {
+            self.navigationItem.rightBarButtonItem = UIBarButtonItem(title: "服务器", style: .plain, target: self, action: #selector(self.openSafeLinkServers))
+        }
         guard let layout = self.validLayout, layout.size.width < 360.0 else {
             return
         }
@@ -124,6 +127,11 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
         }
     }
     
+    @objc private func openSafeLinkServers() {
+        guard !self.inProgress else { return }
+        self.push(self.sharedContext.makeSafeLinkServersController())
+    }
+
     public func updateData(countryCode: Int32, countryName: String?, number: String) {
         self.currentData = (countryCode, countryName, number)
         if self.isNodeLoaded {

@@ -4,21 +4,21 @@ import Postbox
 import TelegramApi
 
 private struct SafeLinkGroupPrivateChatKey: Hashable {
-    let accountPeerId: PeerId
+    let accountId: AccountRecordId
     let peerId: PeerId
 }
 
 private let safeLinkGroupPrivateChatForbiddenState = Atomic<[SafeLinkGroupPrivateChatKey: Bool]>(value: [:])
 
-public func safeLinkGroupPrivateChatForbiddenCached(accountPeerId: PeerId, peerId: PeerId) -> Bool {
-    let key = SafeLinkGroupPrivateChatKey(accountPeerId: accountPeerId, peerId: peerId)
+public func safeLinkGroupPrivateChatForbiddenCached(accountId: AccountRecordId, peerId: PeerId) -> Bool {
+    let key = SafeLinkGroupPrivateChatKey(accountId: accountId, peerId: peerId)
     return safeLinkGroupPrivateChatForbiddenState.with { values in
         return values[key] ?? false
     }
 }
 
-private func updateSafeLinkGroupPrivateChatForbiddenCached(accountPeerId: PeerId, peerId: PeerId, value: Bool) {
-    let key = SafeLinkGroupPrivateChatKey(accountPeerId: accountPeerId, peerId: peerId)
+private func updateSafeLinkGroupPrivateChatForbiddenCached(accountId: AccountRecordId, peerId: PeerId, value: Bool) {
+    let key = SafeLinkGroupPrivateChatKey(accountId: accountId, peerId: peerId)
     let _ = safeLinkGroupPrivateChatForbiddenState.modify { values in
         var values = values
         values[key] = value
@@ -26,8 +26,8 @@ private func updateSafeLinkGroupPrivateChatForbiddenCached(accountPeerId: PeerId
     }
 }
 
-public func safeLinkSetGroupPrivateChatForbiddenCached(accountPeerId: PeerId, peerId: PeerId, value: Bool) {
-    updateSafeLinkGroupPrivateChatForbiddenCached(accountPeerId: accountPeerId, peerId: peerId, value: value)
+public func safeLinkSetGroupPrivateChatForbiddenCached(accountId: AccountRecordId, peerId: PeerId, value: Bool) {
+    updateSafeLinkGroupPrivateChatForbiddenCached(accountId: accountId, peerId: peerId, value: value)
 }
 
 public func safeLinkCurrentUserCanBypassGroupPrivateChatForbidden(_ peer: EnginePeer?) -> Bool {
@@ -50,16 +50,23 @@ public func safeLinkChannelParticipantCanBeContacted(_ participant: ChannelParti
 }
 
 public func safeLinkLoadGroupPrivateChatForbidden(account: Account, peerId: PeerId) -> Signal<Bool, NoError> {
+    return safeLinkRequestGroupPrivateChatForbidden(account: account, peerId: peerId)
+    |> map { value in
+        return value ?? safeLinkGroupPrivateChatForbiddenCached(accountId: account.id, peerId: peerId)
+    }
+}
+
+// Navigation must distinguish a confirmed disabled policy from a failed request.
+public func safeLinkRequestGroupPrivateChatForbidden(account: Account, peerId: PeerId) -> Signal<Bool?, NoError> {
     return account.postbox.transaction { transaction -> Api.InputChannel? in
         return transaction.getPeer(peerId).flatMap(apiInputChannel)
     }
-    |> mapToSignal { inputChannel -> Signal<Bool, NoError> in
+    |> mapToSignal { inputChannel -> Signal<Bool?, NoError> in
         guard let inputChannel = inputChannel else {
-            updateSafeLinkGroupPrivateChatForbiddenCached(accountPeerId: account.peerId, peerId: peerId, value: false)
-            return .single(false)
+            return .single(nil)
         }
         return account.network.request(Api.functions.safelink.getGroupPrivateChatForbidden(channel: inputChannel))
-        |> map { result -> Bool in
+        |> map { result -> Bool? in
             let value: Bool
             switch result {
             case .boolTrue:
@@ -67,11 +74,11 @@ public func safeLinkLoadGroupPrivateChatForbidden(account: Account, peerId: Peer
             case .boolFalse:
                 value = false
             }
-            updateSafeLinkGroupPrivateChatForbiddenCached(accountPeerId: account.peerId, peerId: peerId, value: value)
+            updateSafeLinkGroupPrivateChatForbiddenCached(accountId: account.id, peerId: peerId, value: value)
             return value
         }
-        |> `catch` { _ -> Signal<Bool, NoError> in
-            return .single(safeLinkGroupPrivateChatForbiddenCached(accountPeerId: account.peerId, peerId: peerId))
+        |> `catch` { _ -> Signal<Bool?, NoError> in
+            return .single(nil)
         }
     }
 }
@@ -82,18 +89,18 @@ public func safeLinkSetGroupPrivateChatForbidden(account: Account, peerId: PeerI
     }
     |> mapToSignal { inputChannel -> Signal<Bool, NoError> in
         guard let inputChannel = inputChannel else {
-            return .single(safeLinkGroupPrivateChatForbiddenCached(accountPeerId: account.peerId, peerId: peerId))
+            return .single(safeLinkGroupPrivateChatForbiddenCached(accountId: account.id, peerId: peerId))
         }
-        let previousValue = safeLinkGroupPrivateChatForbiddenCached(accountPeerId: account.peerId, peerId: peerId)
-        updateSafeLinkGroupPrivateChatForbiddenCached(accountPeerId: account.peerId, peerId: peerId, value: enabled)
+        let previousValue = safeLinkGroupPrivateChatForbiddenCached(accountId: account.id, peerId: peerId)
+        updateSafeLinkGroupPrivateChatForbiddenCached(accountId: account.id, peerId: peerId, value: enabled)
         return account.network.request(Api.functions.safelink.toggleGroupPrivateChatForbidden(channel: inputChannel, enabled: enabled ? .boolTrue : .boolFalse))
         |> map { updates -> Bool in
             account.stateManager.addUpdates(updates)
-            updateSafeLinkGroupPrivateChatForbiddenCached(accountPeerId: account.peerId, peerId: peerId, value: enabled)
+            updateSafeLinkGroupPrivateChatForbiddenCached(accountId: account.id, peerId: peerId, value: enabled)
             return enabled
         }
         |> `catch` { _ -> Signal<Bool, NoError> in
-            updateSafeLinkGroupPrivateChatForbiddenCached(accountPeerId: account.peerId, peerId: peerId, value: previousValue)
+            updateSafeLinkGroupPrivateChatForbiddenCached(accountId: account.id, peerId: peerId, value: previousValue)
             return .single(previousValue)
         }
     }

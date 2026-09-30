@@ -116,7 +116,7 @@ func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentat
         }
         
         if !settings.accountsAndPeers.isEmpty {
-            for (peerAccountContext, peer, badgeCount) in settings.accountsAndPeers {
+            for (peerAccountContext, peer, badgeCount) in settings.accountsAndPeers where peerAccountContext.account.network.safeLinkServer.serverId == context.account.network.safeLinkServer.serverId {
                 let mappedContext = ItemListPeerItem.Context.custom(ItemListPeerItem.Context.Custom(
                     accountPeerId: peerAccountContext.account.peerId,
                     engine: peerAccountContext.engine,
@@ -147,6 +147,10 @@ func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentat
             }))
         }
         
+        items[.accounts]!.append(PeerInfoScreenDisclosureItem(id: 101, text: "服务器与账号", icon: PresentationResourcesSettings.proxy, action: {
+            interaction.openSettings(.safeLinkServers)
+        }))
+
         items[.myProfile]!.append(PeerInfoScreenDisclosureItem(id: 0, text: presentationData.strings.Settings_MyProfile, icon: PresentationResourcesSettings.myProfile, action: {
             interaction.openSettings(.profile)
         }))
