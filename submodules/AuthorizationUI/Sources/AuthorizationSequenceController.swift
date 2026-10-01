@@ -39,6 +39,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
     private let sharedContext: SharedAccountContext
     private var account: UnauthorizedAccount
     private let otherAccountPhoneNumbers: ((String, AccountRecordId, Bool)?, [(String, AccountRecordId, Bool)])
+    private let hasOtherAccounts: Bool
     private let apiId: Int32
     private let apiHash: String
     public var presentationData: PresentationData
@@ -63,10 +64,11 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
     
     private var inAppPurchaseManager: InAppPurchaseManager!
     
-    public init(sharedContext: SharedAccountContext, account: UnauthorizedAccount, otherAccountPhoneNumbers: ((String, AccountRecordId, Bool)?, [(String, AccountRecordId, Bool)]), presentationData: PresentationData, openUrl: @escaping (String) -> Void, apiId: Int32, apiHash: String, authorizationCompleted: @escaping () -> Void) {
+    public init(sharedContext: SharedAccountContext, account: UnauthorizedAccount, otherAccountPhoneNumbers: ((String, AccountRecordId, Bool)?, [(String, AccountRecordId, Bool)]), hasOtherAccounts: Bool, presentationData: PresentationData, openUrl: @escaping (String) -> Void, apiId: Int32, apiHash: String, authorizationCompleted: @escaping () -> Void) {
         self.sharedContext = sharedContext
         self.account = account
         self.otherAccountPhoneNumbers = otherAccountPhoneNumbers
+        self.hasOtherAccounts = hasOtherAccounts
         self.apiId = apiId
         self.apiHash = apiHash
         self.presentationData = presentationData
@@ -170,13 +172,13 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
         if let currentController = currentController {
             controller = currentController
         } else {
-            controller = AuthorizationSequencePhoneEntryController(sharedContext: self.sharedContext, account: self.account, apiId: self.apiId, apiHash: self.apiHash, isTestingEnvironment: self.account.testingEnvironment, otherAccountPhoneNumbers: self.otherAccountPhoneNumbers, network: self.account.network, presentationData: self.presentationData, openUrl: { [weak self] url in
+            controller = AuthorizationSequencePhoneEntryController(sharedContext: self.sharedContext, account: self.account, apiId: self.apiId, apiHash: self.apiHash, isTestingEnvironment: self.account.testingEnvironment, otherAccountPhoneNumbers: self.otherAccountPhoneNumbers, hasOtherAccounts: self.hasOtherAccounts, network: self.account.network, presentationData: self.presentationData, openUrl: { [weak self] url in
                 self?.openUrl(url)
             }, back: { [weak self] in
                 guard let strongSelf = self else {
                     return
                 }
-                if !strongSelf.otherAccountPhoneNumbers.1.isEmpty {
+                if strongSelf.hasOtherAccounts {
                     let _ = (strongSelf.sharedContext.accountManager.transaction { transaction -> Void in
                         transaction.removeAuth()
                     }).startStandalone()
@@ -1206,7 +1208,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                         avatarVideo = nil
                     }
                     
-                    strongSelf.actionDisposable.set((signUpWithName(accountManager: strongSelf.sharedContext.accountManager, account: strongSelf.account, firstName: firstName, lastName: lastName, avatarData: avatarData, avatarVideo: avatarVideo, videoStartTimestamp: videoStartTimestamp, disableJoinNotifications: !announceSignUp, forcedPasswordSetupNotice: { value in
+                    strongSelf.actionDisposable.set((signUpWithName(accountManager: strongSelf.sharedContext.accountManager, account: strongSelf.account, firstName: firstName, lastName: lastName, avatarData: avatarData, avatarVideo: avatarVideo, videoStartTimestamp: videoStartTimestamp, disableJoinNotifications: !announceSignUp, registrationInviteCode: controller?.registrationInviteCode ?? "", forcedPasswordSetupNotice: { value in
                         guard let entry = EngineCodableEntry(ApplicationSpecificCounterNotice(value: value)) else {
                             return nil
                         }
@@ -1227,6 +1229,10 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                                         text = strongSelf.presentationData.strings.Login_InvalidFirstNameError
                                     case .invalidLastName:
                                         text = strongSelf.presentationData.strings.Login_InvalidLastNameError
+                                    case .inviteRequired:
+                                        text = "此服务器已开启邀请注册，请填写邀请码。"
+                                    case .inviteInvalid:
+                                        text = "邀请码无效、已过期或名额已用完，请联系管理员。"
                                     case .generic:
                                         text = strongSelf.presentationData.strings.Login_UnknownError
                                 }
@@ -1252,7 +1258,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                     if let _ = self.viewControllers.last as? AuthorizationSequenceSplashController {
                     } else {
                         var controllers: [ViewController] = []
-                        if self.otherAccountPhoneNumbers.1.isEmpty {
+                        if !self.hasOtherAccounts {
                             controllers.append(self.splashController())
                         } else {
                             controllers.append(self.phoneEntryController(countryCode: AuthorizationSequenceCountrySelectionController.defaultCountryCode(), number: "", splashController: nil))
@@ -1261,7 +1267,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                     }
                 case let .phoneEntry(countryCode, number):
                     var controllers: [ViewController] = []
-                    if !self.otherAccountPhoneNumbers.1.isEmpty {
+                    if self.hasOtherAccounts {
                         controllers.append(self.splashController())
                     }
                     var previousSplashController: AuthorizationSequenceSplashController?
@@ -1280,7 +1286,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                     self.setViewControllers(controllers, animated: !self.viewControllers.isEmpty && (previousSplashController == nil || self.viewControllers.count > 2))
                 case let .confirmationCodeEntry(number, type, phoneCodeHash, timeout, nextType, _, previousCodeEntry, usePrevious):
                     var controllers: [ViewController] = []
-                    if !self.otherAccountPhoneNumbers.1.isEmpty {
+                    if self.hasOtherAccounts {
                         controllers.append(self.splashController())
                     }
                     controllers.append(self.phoneEntryController(countryCode: AuthorizationSequenceCountrySelectionController.defaultCountryCode(), number: "", splashController: nil))
@@ -1318,21 +1324,21 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                     }
                 case let .passwordEntry(hint, _, _, suggestReset, syncContacts):
                     var controllers: [ViewController] = []
-                    if !self.otherAccountPhoneNumbers.1.isEmpty {
+                    if self.hasOtherAccounts {
                         controllers.append(self.splashController())
                     }
                     controllers.append(self.passwordEntryController(hint: hint, suggestReset: suggestReset, syncContacts: syncContacts))
                     self.setViewControllers(controllers, animated: !self.viewControllers.isEmpty)
                 case let .passwordRecovery(_, _, _, emailPattern, syncContacts):
                     var controllers: [ViewController] = []
-                    if !self.otherAccountPhoneNumbers.1.isEmpty {
+                    if self.hasOtherAccounts {
                         controllers.append(self.splashController())
                     }
                     controllers.append(self.passwordRecoveryController(emailPattern: emailPattern, syncContacts: syncContacts))
                     self.setViewControllers(controllers, animated: !self.viewControllers.isEmpty)
                 case let .awaitingAccountReset(protectedUntil, number, _):
                     var controllers: [ViewController] = []
-                    if !self.otherAccountPhoneNumbers.1.isEmpty {
+                    if self.hasOtherAccounts {
                         controllers.append(self.splashController())
                     }
                     controllers.append(self.awaitingAccountResetController(protectedUntil: protectedUntil, number: number))
@@ -1340,7 +1346,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                 case let .signUp(_, _, firstName, lastName, termsOfService, _):
                     var controllers: [ViewController] = []
                     var displayCancel = false
-                    if !self.otherAccountPhoneNumbers.1.isEmpty {
+                    if self.hasOtherAccounts {
                         controllers.append(self.splashController())
                     } else {
                         displayCancel = true
@@ -1349,7 +1355,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                     self.setViewControllers(controllers, animated: !self.viewControllers.isEmpty)
                 case let .payment(number, codeHash, storeProduct, premiumDays, supportEmailAddress, supportEmailSubject, _):
                     var controllers: [ViewController] = []
-                    if !self.otherAccountPhoneNumbers.1.isEmpty {
+                    if self.hasOtherAccounts {
                         controllers.append(self.splashController())
                     }
                 controllers.append(self.paymentController(number: number, phoneCodeHash: codeHash, storeProduct: storeProduct, premiumDays: premiumDays, supportEmailAddress: supportEmailAddress, supportEmailSubject: supportEmailSubject))
@@ -1403,7 +1409,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
     }
     
     private func animateIn() {
-        if !self.otherAccountPhoneNumbers.1.isEmpty {
+        if self.hasOtherAccounts {
             self.view.layer.animatePosition(from: CGPoint(x: self.view.layer.position.x, y: self.view.layer.position.y + self.view.layer.bounds.size.height), to: self.view.layer.position, duration: 0.5, timingFunction: kCAMediaTimingFunctionSpring)
         } else {
             if let splashController = self.topViewController as? AuthorizationSequenceSplashController {

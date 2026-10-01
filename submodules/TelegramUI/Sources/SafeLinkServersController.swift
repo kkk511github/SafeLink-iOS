@@ -47,6 +47,7 @@ private final class SafeLinkServerActions {
     var contexts: [AccountRecordId: AccountContext] = [:]
     var accountLimit = 3
     var adding = false
+    var hasPendingAuth = false
 
     init(sharedContext: SharedAccountContext, rootPath: String) {
         self.sharedContext = sharedContext
@@ -62,7 +63,7 @@ private final class SafeLinkServerActions {
 
     func activate(_ entry: SafeLinkServerEntry) {
         if let accountId = entry.accountId {
-            guard !entry.isCurrent else { return }
+            guard !entry.isCurrent || hasPendingAuth else { return }
             controller?.dismiss()
             sharedContext.switchToAccount(id: accountId, fromSettingsController: nil, withChatListController: nil)
         } else if let server = entry.server {
@@ -124,6 +125,7 @@ func safeLinkServersController(sharedContext: SharedAccountContext, rootPath: St
     |> deliverOnMainQueue
     |> map { presentationData, info, contexts, _ -> (ItemListControllerState, (ItemListNodeState, SafeLinkServerActions)) in
         actions.contexts = Dictionary(uniqueKeysWithValues: contexts.accounts.map { ($0.0, $0.1) })
+        actions.hasPendingAuth = contexts.currentAuth != nil
         actions.accountLimit = info.accounts.contains(where: { $0.peer.isPremium }) ? 4 : 3
         var entries: [SafeLinkServerEntry] = []
         var servers: [SafeLinkServer] = []

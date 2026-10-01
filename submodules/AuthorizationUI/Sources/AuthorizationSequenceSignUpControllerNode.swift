@@ -33,6 +33,8 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
     
     private let firstNameField: TextFieldNode
     private let lastNameField: TextFieldNode
+    private let inviteField: TextFieldNode
+    private let inviteSeparatorNode: ASDisplayNode
     private let firstSeparatorNode: ASDisplayNode
     private let lastSeparatorNode: ASDisplayNode
     private let currentPhotoNode: ASImageNode
@@ -45,6 +47,10 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
     
     var currentName: (String, String) {
         return (self.firstNameField.textField.text ?? "", self.lastNameField.textField.text ?? "")
+    }
+
+    var registrationInviteCode: String {
+        return (self.inviteField.textField.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
     }
     
     var currentPhoto: UIImage? = nil {
@@ -70,6 +76,8 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
         didSet {
             self.firstNameField.alpha = self.inProgress ? 0.6 : 1.0
             self.lastNameField.alpha = self.inProgress ? 0.6 : 1.0
+            self.inviteField.alpha = self.inProgress ? 0.6 : 1.0
+            self.inviteField.isUserInteractionEnabled = !self.inProgress
             
             if self.inProgress != oldValue {
                 if self.inProgress {
@@ -143,6 +151,21 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
         self.lastNameField.textField.tintColor = theme.list.itemAccentColor
         self.lastNameField.textField.accessibilityIdentifier = "Auth.SetName.LastNameField"
 
+        self.lastNameField.textField.returnKeyType = .next
+        self.inviteField = TextFieldNode()
+        self.inviteField.textField.font = Font.regular(20.0)
+        self.inviteField.textField.textColor = theme.list.itemPrimaryTextColor
+        self.inviteField.textField.attributedPlaceholder = NSAttributedString(string: "注册邀请码", font: Font.regular(20.0), textColor: theme.list.itemPlaceholderTextColor)
+        self.inviteField.textField.autocapitalizationType = .allCharacters
+        self.inviteField.textField.autocorrectionType = .no
+        self.inviteField.textField.keyboardType = .asciiCapable
+        self.inviteField.textField.returnKeyType = .done
+        self.inviteField.textField.keyboardAppearance = theme.rootController.keyboardColor.keyboardAppearance
+        self.inviteField.textField.tintColor = theme.list.itemAccentColor
+        self.inviteField.textField.accessibilityIdentifier = "Auth.SetName.InviteCodeField"
+        self.inviteSeparatorNode = ASDisplayNode()
+        self.inviteSeparatorNode.backgroundColor = theme.list.itemPlainSeparatorColor
+
         self.currentPhotoNode = ASImageNode()
         self.currentPhotoNode.isUserInteractionEnabled = false
         self.currentPhotoNode.displaysAsynchronously = false
@@ -169,11 +192,14 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
         
         self.firstNameField.textField.delegate = self
         self.lastNameField.textField.delegate = self
+        self.inviteField.textField.delegate = self
         
         self.addSubnode(self.firstSeparatorNode)
         self.addSubnode(self.lastSeparatorNode)
         self.addSubnode(self.firstNameField)
         self.addSubnode(self.lastNameField)
+        self.addSubnode(self.inviteField)
+        self.addSubnode(self.inviteSeparatorNode)
         self.addSubnode(self.titleNode)
         self.addSubnode(self.currentOptionNode)
         self.addSubnode(self.termsNode)
@@ -246,19 +272,24 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
         let noticeSize = self.currentOptionNode.measure(CGSize(width: maximumWidth - 28.0, height: CGFloat.greatestFiniteMagnitude))
         let termsSize = self.termsNode.updateLayout(CGSize(width: maximumWidth - 28.0, height: CGFloat.greatestFiniteMagnitude))
         
-        let avatarSize: CGSize = CGSize(width: 110.0, height: 110.0)
+        let compact = layout.size.height - insets.top - insets.bottom - additionalBottomInset < 430.0
+        let avatarSize: CGSize = compact ? .zero : CGSize(width: 110.0, height: 110.0)
+        self.addPhotoButton.isHidden = compact
+        self.currentOptionNode.isHidden = compact
         var items: [AuthorizationLayoutItem] = []
         items.append(AuthorizationLayoutItem(node: self.addPhotoButton, size: avatarSize, spacingBefore: AuthorizationLayoutItemSpacing(weight: 16.0, maxValue: 16.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
         self.currentPhotoNode.frame = CGRect(origin: CGPoint(), size: avatarSize)
         
         items.append(AuthorizationLayoutItem(node: self.titleNode, size: titleSize, spacingBefore: AuthorizationLayoutItemSpacing(weight: 18.0, maxValue: 18.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
-        items.append(AuthorizationLayoutItem(node: self.currentOptionNode, size: noticeSize, spacingBefore: AuthorizationLayoutItemSpacing(weight: 20.0, maxValue: 20.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
+        items.append(AuthorizationLayoutItem(node: self.currentOptionNode, size: compact ? .zero : noticeSize, spacingBefore: AuthorizationLayoutItemSpacing(weight: 20.0, maxValue: compact ? 0.0 : 20.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
         
         items.append(AuthorizationLayoutItem(node: self.firstNameField, size: CGSize(width: layout.size.width - (sideInset + innerInset) * 2.0, height: fieldHeight), spacingBefore: AuthorizationLayoutItemSpacing(weight: 32.0, maxValue: 60.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
         items.append(AuthorizationLayoutItem(node: self.firstSeparatorNode, size: CGSize(width: layout.size.width - sideInset * 2.0, height: UIScreenPixel), spacingBefore: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
         
         items.append(AuthorizationLayoutItem(node: self.lastNameField, size: CGSize(width: layout.size.width - (sideInset + innerInset) * 2.0, height: fieldHeight), spacingBefore: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
         items.append(AuthorizationLayoutItem(node: self.lastSeparatorNode, size: CGSize(width: layout.size.width - sideInset * 2.0, height: UIScreenPixel), spacingBefore: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
+        items.append(AuthorizationLayoutItem(node: self.inviteField, size: CGSize(width: layout.size.width - (sideInset + innerInset) * 2.0, height: fieldHeight), spacingBefore: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
+        items.append(AuthorizationLayoutItem(node: self.inviteSeparatorNode, size: CGSize(width: layout.size.width - sideInset * 2.0, height: UIScreenPixel), spacingBefore: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
         
         items.append(AuthorizationLayoutItem(node: self.termsNode, size: termsSize, spacingBefore: AuthorizationLayoutItemSpacing(weight: 48.0, maxValue: 100.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
         
@@ -290,6 +321,8 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
     func textFieldShouldReturn(_ textField: UITextField) -> Bool {
         if textField === self.firstNameField.textField {
             self.lastNameField.textField.becomeFirstResponder()
+        } else if textField === self.lastNameField.textField {
+            self.inviteField.textField.becomeFirstResponder()
         } else {
             let name = self.currentName
             self.signUpWithName?(name.0, name.1)
@@ -299,5 +332,12 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
     
     @objc private func addPhotoPressed() {
         self.addPhoto()
+    }
+
+    func textField(_ textField: UITextField, shouldChangeCharactersIn range: NSRange, replacementString string: String) -> Bool {
+        if textField === self.inviteField.textField {
+            return ((textField.text ?? "") as NSString).replacingCharacters(in: range, with: string).utf8.count <= 64
+        }
+        return true
     }
 }

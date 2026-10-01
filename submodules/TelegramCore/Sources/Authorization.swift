@@ -88,10 +88,6 @@ func storeFutureLoginToken(accountManager: AccountManager<TelegramAccountManager
         let otherTokens = transaction.getStoredLoginTokens().filter { !$0.starts(with: prefix) }
         var tokens = transaction.getStoredLoginTokens().filter { $0.starts(with: prefix) }.map { Data($0.dropFirst(prefix.count)) }
         
-        #if DEBUG
-        tokens.removeAll()
-        #endif
-        
         var cloudValue: [Data] = []
         if let list = NSUbiquitousKeyValueStore.default.object(forKey: cloudKey) as? [String] {
             cloudValue = list.compactMap { string -> Data? in
@@ -103,9 +99,10 @@ func storeFutureLoginToken(accountManager: AccountManager<TelegramAccountManager
         }
         for data in cloudValue {
             if !tokens.contains(data) {
-                tokens.insert(data, at: 0)
+                tokens.append(data)
             }
         }
+        tokens.removeAll(where: { $0 == token })
         tokens.insert(token, at: 0)
         if tokens.count > 20 {
             tokens.removeLast(tokens.count - 20)
@@ -165,7 +162,7 @@ public func sendAuthorizationCode(accountManager: AccountManager<TelegramAccount
         
         for data in cloudValue {
             if !authTokens.contains(data) {
-                authTokens.insert(data, at: 0)
+                authTokens.append(data)
             }
         }
         
@@ -173,9 +170,7 @@ public func sendAuthorizationCode(accountManager: AccountManager<TelegramAccount
             authTokens.removeAll()
         }
         
-#if DEBUG
-        authTokens.removeAll()
-#endif
+        authTokens = Array(authTokens.prefix(20))
         
         var flags: Int32 = 0
         flags |= 1 << 5 //allowMissedCall
@@ -1492,16 +1487,20 @@ public enum SignUpError {
     case codeExpired
     case invalidFirstName
     case invalidLastName
+    case inviteRequired
+    case inviteInvalid
 }
 
-public func signUpWithName(accountManager: AccountManager<TelegramAccountManagerTypes>, account: UnauthorizedAccount, firstName: String, lastName: String, avatarData: Data?, avatarVideo: Signal<UploadedPeerPhotoData?, NoError>?, videoStartTimestamp: Double?, disableJoinNotifications: Bool = false, forcedPasswordSetupNotice: @escaping (Int32) -> (NoticeEntryKey, CodableEntry)?) -> Signal<Void, SignUpError> {
+public func signUpWithName(accountManager: AccountManager<TelegramAccountManagerTypes>, account: UnauthorizedAccount, firstName: String, lastName: String, avatarData: Data?, avatarVideo: Signal<UploadedPeerPhotoData?, NoError>?, videoStartTimestamp: Double?, disableJoinNotifications: Bool = false, registrationInviteCode: String = "", forcedPasswordSetupNotice: @escaping (Int32) -> (NoticeEntryKey, CodableEntry)?) -> Signal<Void, SignUpError> {
     return account.postbox.transaction { transaction -> Signal<Void, SignUpError> in
         if let state = transaction.getState() as? UnauthorizedAccountState, case let .signUp(number, codeHash, _, _, _, syncContacts) = state.contents {
             var flags: Int32 = 0
             if disableJoinNotifications {
                 flags |= (1 << 0)
             }
-            return account.network.request(Api.functions.auth.signUp(flags: flags, phoneNumber: number, phoneCodeHash: codeHash, firstName: firstName, lastName: lastName))
+            let invite = registrationInviteCode.trimmingCharacters(in: .whitespacesAndNewlines)
+            let registrationHash = invite.isEmpty ? codeHash : codeHash + ":safelink-invite:" + invite
+            return account.network.request(Api.functions.auth.signUp(flags: flags, phoneNumber: number, phoneCodeHash: registrationHash, firstName: firstName, lastName: lastName))
             |> mapError { error -> SignUpError in
                 if error.errorDescription.hasPrefix("FLOOD_WAIT") {
                     return .limitExceeded
@@ -1511,6 +1510,10 @@ public func signUpWithName(accountManager: AccountManager<TelegramAccountManager
                     return .invalidFirstName
                 } else if error.errorDescription == "LASTNAME_INVALID" {
                     return .invalidLastName
+                } else if error.errorDescription == "INVITE_CODE_REQUIRED" {
+                    return .inviteRequired
+                } else if error.errorDescription == "INVITE_CODE_INVALID" {
+                    return .inviteInvalid
                 } else {
                     return .generic
                 }

@@ -32,6 +32,7 @@ final class AuthorizationSequenceSignUpController: ViewController {
     private var termsOfService: UnauthorizedAccountTermsOfService?
     
     var signUpWithName: ((String, String, Data?, Any?, TGVideoEditAdjustments?, Bool) -> Void)?
+    var registrationInviteCode: String { return self.controllerNode.registrationInviteCode }
     var openUrl: ((String) -> Void)?
     
     var avatarAsset: Any?

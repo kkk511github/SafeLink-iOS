@@ -27,6 +27,7 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
     private let apiHash: String
     private let isTestingEnvironment: Bool
     private let otherAccountPhoneNumbers: ((String, AccountRecordId, Bool)?, [(String, AccountRecordId, Bool)])
+    private let hasOtherAccounts: Bool
     private let network: Network
     private let presentationData: PresentationData
     private let openUrl: (String) -> Void
@@ -64,13 +65,14 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
     
     private let hapticFeedback = HapticFeedback()
     
-    public init(sharedContext: SharedAccountContext, account: UnauthorizedAccount?, countriesConfiguration: CountriesConfiguration? = nil, apiId: Int32, apiHash: String, isTestingEnvironment: Bool, otherAccountPhoneNumbers: ((String, AccountRecordId, Bool)?, [(String, AccountRecordId, Bool)]), network: Network, presentationData: PresentationData, openUrl: @escaping (String) -> Void, back: @escaping () -> Void) {
+    public init(sharedContext: SharedAccountContext, account: UnauthorizedAccount?, countriesConfiguration: CountriesConfiguration? = nil, apiId: Int32, apiHash: String, isTestingEnvironment: Bool, otherAccountPhoneNumbers: ((String, AccountRecordId, Bool)?, [(String, AccountRecordId, Bool)]), hasOtherAccounts: Bool? = nil, network: Network, presentationData: PresentationData, openUrl: @escaping (String) -> Void, back: @escaping () -> Void) {
         self.sharedContext = sharedContext
         self.account = account
         self.apiId = apiId
         self.apiHash = apiHash
         self.isTestingEnvironment = isTestingEnvironment
         self.otherAccountPhoneNumbers = otherAccountPhoneNumbers
+        self.hasOtherAccounts = hasOtherAccounts ?? !otherAccountPhoneNumbers.1.isEmpty
         self.network = network
         self.presentationData = presentationData
         self.openUrl = openUrl
@@ -90,7 +92,7 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
             back()
         }
         
-        if !otherAccountPhoneNumbers.1.isEmpty {
+        if self.hasOtherAccounts {
             self.navigationItem.leftBarButtonItem = UIBarButtonItem(title: "___close", style: .plain, target: self, action: #selector(self.cancelPressed))
         }
         
@@ -157,7 +159,7 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
             }
             strongSelf.view.endEditing(true)
             self?.present(debugController(sharedContext: strongSelf.sharedContext, context: nil, modal: true), in: .window(.root), with: ViewControllerPresentationArguments(presentationAnimation: .modalSheet))
-        }, hasOtherAccounts: self.otherAccountPhoneNumbers.0 != nil)
+        }, hasOtherAccounts: self.hasOtherAccounts)
         self.controllerNode.accountUpdated = { [weak self] account in
             guard let strongSelf = self else {
                 return

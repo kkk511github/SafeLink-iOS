@@ -1763,7 +1763,7 @@ public final class SharedAccountContextImpl: SharedAccountContext {
     }
     
     public func switchToAccount(id: AccountRecordId, fromSettingsController settingsController: ViewController? = nil, withChatListController chatListController: ViewController? = nil) {
-        if self.activeAccountsValue?.primary?.account.id == id {
+        if self.activeAccountsValue?.primary?.account.id == id && self.activeAccountsValue?.currentAuth == nil {
             return
         }
         
@@ -1789,6 +1789,7 @@ public final class SharedAccountContextImpl: SharedAccountContext {
         self.switchingData = (settingsController as? (ViewController & SettingsController), chatListController as? ChatListController, chatsBadge)
         
         let _ = self.accountManager.transaction({ transaction -> Bool in
+            transaction.removeAuth()
             if transaction.getCurrent()?.0 != id {
                 transaction.setCurrentId(id)
                 return true

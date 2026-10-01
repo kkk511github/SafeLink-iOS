@@ -1272,7 +1272,7 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
                 }
                 return true
             })
-            |> mapToSignal { authAndAccounts -> Signal<(UnauthorizedAccount, ((String, AccountRecordId, Bool)?, [(String, AccountRecordId, Bool)]))?, NoError> in
+            |> mapToSignal { authAndAccounts -> Signal<(UnauthorizedAccount, ((String, AccountRecordId, Bool)?, [(String, AccountRecordId, Bool)]), Bool)?, NoError> in
                 if let (primary, auth, accounts) = authAndAccounts {
                     let phoneNumbers = combineLatest(accounts.map { context -> Signal<(AccountRecordId, String, Bool)?, NoError> in
                         guard context.account.network.safeLinkServer.serverId == auth.network.safeLinkServer.serverId else { return .single(nil) }
@@ -1286,7 +1286,7 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
                         }
                     })
                     return phoneNumbers
-                    |> map { phoneNumbers -> (UnauthorizedAccount, ((String, AccountRecordId, Bool)?, [(String, AccountRecordId, Bool)]))? in
+                    |> map { phoneNumbers -> (UnauthorizedAccount, ((String, AccountRecordId, Bool)?, [(String, AccountRecordId, Bool)]), Bool)? in
                         var primaryNumber: (String, AccountRecordId, Bool)?
                         if let primary = primary {
                             for idAndNumber in phoneNumbers {
@@ -1296,7 +1296,7 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
                                 }
                             }
                         }
-                        return (auth, (primaryNumber, phoneNumbers.compactMap({ $0.flatMap({ ($0.1, $0.0, $0.2) }) })))
+                        return (auth, (primaryNumber, phoneNumbers.compactMap({ $0.flatMap({ ($0.1, $0.0, $0.2) }) })), !accounts.isEmpty)
                     }
                 } else {
                     return .single(nil)
@@ -1304,8 +1304,8 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
             }
             |> deliverOnMainQueue
             |> map { accountAndSettings -> UnauthorizedApplicationContext? in
-                return accountAndSettings.flatMap { account, otherAccountPhoneNumbers in
-                    return UnauthorizedApplicationContext(apiId: buildConfig.apiId, apiHash: buildConfig.apiHash, sharedContext: sharedApplicationContext.sharedContext, account: account, otherAccountPhoneNumbers: otherAccountPhoneNumbers)
+                return accountAndSettings.flatMap { account, otherAccountPhoneNumbers, hasOtherAccounts in
+                    return UnauthorizedApplicationContext(apiId: buildConfig.apiId, apiHash: buildConfig.apiHash, sharedContext: sharedApplicationContext.sharedContext, account: account, otherAccountPhoneNumbers: otherAccountPhoneNumbers, hasOtherAccounts: hasOtherAccounts)
                 }
             }
         })
