@@ -27,6 +27,8 @@ final class AuthorizationSequenceSignUpController: ViewController {
     private let sharedContext: SharedAccountContext
     private let presentationData: PresentationData
     private let back: () -> Void
+    private let account: UnauthorizedAccount
+    private let invitePolicyDisposable = MetaDisposable()
     
     var initialName: (String, String) = ("", "")
     private var termsOfService: UnauthorizedAccountTermsOfService?
@@ -49,8 +51,9 @@ final class AuthorizationSequenceSignUpController: ViewController {
         }
     }
     
-    init(sharedContext: SharedAccountContext, presentationData: PresentationData, back: @escaping () -> Void, displayCancel: Bool) {
+    init(sharedContext: SharedAccountContext, account: UnauthorizedAccount, presentationData: PresentationData, back: @escaping () -> Void, displayCancel: Bool) {
         self.sharedContext = sharedContext
+        self.account = account
         self.presentationData = presentationData
         self.back = back
         
@@ -93,6 +96,18 @@ final class AuthorizationSequenceSignUpController: ViewController {
     
     required init(coder aDecoder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    deinit {
+        self.invitePolicyDisposable.dispose()
+    }
+
+    func refreshInvitePolicy() {
+        self.invitePolicyDisposable.set((registrationInviteRequired(account: self.account)
+        |> deliverOnMainQueue).start(next: { [weak self] required in
+            guard let self, let required else { return }
+            self.controllerNode.updateInvitePlaceholder(required: required)
+        }))
     }
     
     @objc private func cancelPressed() {
@@ -218,6 +233,7 @@ final class AuthorizationSequenceSignUpController: ViewController {
     
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
+        self.refreshInvitePolicy()
         
         if let navigationController = self.navigationController as? NavigationController, let layout = self.validLayout {
             addTemporaryKeyboardSnapshotView(navigationController: navigationController, layout: layout)

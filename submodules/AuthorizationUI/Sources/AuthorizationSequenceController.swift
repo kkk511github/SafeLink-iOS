@@ -1134,7 +1134,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
         if let currentController = currentController {
             controller = currentController
         } else {
-            controller = AuthorizationSequenceSignUpController(sharedContext: self.sharedContext, presentationData: self.presentationData, back: { [weak self] in
+            controller = AuthorizationSequenceSignUpController(sharedContext: self.sharedContext, account: self.account, presentationData: self.presentationData, back: { [weak self] in
                 guard let strongSelf = self else {
                     return
                 }
@@ -1230,8 +1230,10 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                                     case .invalidLastName:
                                         text = strongSelf.presentationData.strings.Login_InvalidLastNameError
                                     case .inviteRequired:
+                                        controller.refreshInvitePolicy()
                                         text = "此服务器已开启邀请注册，请填写邀请码。"
                                     case .inviteInvalid:
+                                        controller.refreshInvitePolicy()
                                         text = "邀请码无效、已过期或名额已用完，请联系管理员。"
                                     case .generic:
                                         text = strongSelf.presentationData.strings.Login_UnknownError

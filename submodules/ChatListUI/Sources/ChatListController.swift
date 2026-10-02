@@ -187,6 +187,7 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
     private(set) var isPremium: Bool = false
     private(set) var storyPostingAvailability: StoriesConfiguration.PostingAvailability = .disabled
     private var storiesPostingAvailabilityDisposable: Disposable?
+    private var registrationPasswordDisposable: Disposable?
     private let storyPostingAvailabilityValue = ValuePromise<StoriesConfiguration.PostingAvailability>(.disabled)
     
     private var didSetupTabs = false
@@ -811,6 +812,7 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
         self.preloadStorySubscriptionsDisposable?.dispose()
         self.storyProgressDisposable?.dispose()
         self.storiesPostingAvailabilityDisposable?.dispose()
+        self.registrationPasswordDisposable?.dispose()
         self.sharedOpenStoryProgressDisposable.dispose()
         for (_, disposable) in self.preloadStoryResourceDisposables {
             disposable.dispose()
@@ -2607,20 +2609,48 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
             }))
             
             Queue.mainQueue().after(1.0, {
-                let _ = (
-                    self.context.engine.data.get(
+                self.registrationPasswordDisposable?.dispose()
+                let registrationRequirement: Signal<(String?, Int32?), NoError> = (
+                    self.context.engine.data.subscribe(
                         TelegramEngine.EngineData.Item.Peer.Peer(id: self.context.account.peerId),
-                        TelegramEngine.EngineData.Item.Notices.Notice(key: ApplicationSpecificNotice.forcedPasswordSetupKey())
+                        TelegramEngine.EngineData.Item.Notices.Notice(key: ApplicationSpecificNotice.forcedPasswordSetupKey()),
+                        TelegramEngine.EngineData.Item.Configuration.ApplicationSpecificPreference(key: PreferencesKeys.appConfiguration)
                     )
-                    |> map { peer, entry -> (phoneNumber: String?, nortice: Int32?) in
+                    |> map { peer, entry, preference -> (String?, Int32?) in
                         var phoneNumber: String?
                         if case let .user(user) = peer {
                             phoneNumber = user.phone
                         }
-                        return (phoneNumber, entry?.get(ApplicationSpecificCounterNotice.self)?.value)
+                        let required = preference?.get(AppConfiguration.self)?.data?["safelink_registration_password_required"] as? Bool
+                        var value = entry?.get(ApplicationSpecificCounterNotice.self)?.value
+                        if required == true { value = 0 }
+                        if required == false && value == 0 { value = nil }
+                        return (phoneNumber, value)
                     }
+                    |> distinctUntilChanged(isEqual: { lhs, rhs in
+                        return lhs.0 == rhs.0 && lhs.1 == rhs.1
+                    })
+                )
+                let registrationPrompt: Signal<(String?, Int32?, String?), NoError> = registrationRequirement
+                    |> mapToSignal { [weak self] phone, value -> Signal<(String?, Int32?, String?), NoError> in
+                        guard let self, let value else { return .single((phone, nil, nil)) }
+                        return self.context.engine.auth.twoStepVerificationConfiguration()
+                        |> take(1)
+                        |> map { (configuration: TwoStepVerificationConfiguration) -> (String?, Int32?, String?) in
+                            switch configuration {
+                            case let .notSet(pendingEmail):
+                                return (phone, value, pendingEmail?.pattern)
+                            case let .set(_, _, pendingEmail, _, _):
+                                if let pendingEmail {
+                                    return (phone, value, pendingEmail.pattern)
+                                }
+                                return (phone, nil, nil)
+                            }
+                        }
+                    }
+                self.registrationPasswordDisposable = (registrationPrompt
                     |> deliverOnMainQueue
-                ).startStandalone(next: { [weak self] phoneNumber, value in
+                ).start(next: { [weak self] phoneNumber, value, pendingEmail in
                     guard let strongSelf = self else {
                         return
                     }
@@ -2628,17 +2658,37 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
                     guard let value = value else {
                         return
                     }
+                    guard let navigation = strongSelf.navigationController as? NavigationController,
+                        strongSelf.isViewLoaded, strongSelf.view.window != nil,
+                        !navigation.viewControllers.contains(where: { $0 is TwoFactorAuthSplashScreen || $0 is TwoFactorDataInputScreen }) else { return }
+                    if value == 0, let pendingEmail {
+                        let controller = TwoFactorDataInputScreen(sharedContext: strongSelf.context.sharedContext, engine: .authorized(strongSelf.context.engine), mode: .emailConfirmation(passwordAndHint: nil, emailPattern: pendingEmail, codeLength: nil, doneText: "开始使用 SafeLink"), stateUpdated: { _ in })
+                        strongSelf.push(controller)
+                        return
+                    }
                     
                     let controller = TwoFactorAuthSplashScreen(sharedContext: context.sharedContext, engine: .authorized(strongSelf.context.engine), mode: .intro(.init(
-                        title: strongSelf.presentationData.strings.ForcedPasswordSetup_Intro_Title,
-                        text: strongSelf.presentationData.strings.ForcedPasswordSetup_Intro_Text,
+                        title: value == 0 ? "设置登录密码" : strongSelf.presentationData.strings.ForcedPasswordSetup_Intro_Title,
+                        text: value == 0 ? "完成密码设置后即可使用 SafeLink。此设备保留有效登录凭证时，下次登录可直接验证密码。" : strongSelf.presentationData.strings.ForcedPasswordSetup_Intro_Text,
                         actionText: strongSelf.presentationData.strings.ForcedPasswordSetup_Intro_Action,
-                        doneText: strongSelf.presentationData.strings.ForcedPasswordSetup_Intro_DoneAction,
+                        doneText: value == 0 ? "开始使用 SafeLink" : strongSelf.presentationData.strings.ForcedPasswordSetup_Intro_DoneAction,
                         phoneNumber: phoneNumber
                     )))
                     controller.dismissConfirmation = { [weak controller] f in
                         guard let strongSelf = self, let controller = controller else {
                             return true
+                        }
+                        if value == 0 {
+                            if strongSelf.context.currentAppConfiguration.with({ $0.data?["safelink_registration_password_required"] as? Bool }) == false {
+                                return true
+                            }
+                            controller.present(textAlertController(context: strongSelf.context, title: "请先设置密码", text: "此服务器要求新用户完成两步验证密码设置。", actions: [
+                                TextAlertAction(type: .defaultAction, title: "继续设置", action: {}),
+                                TextAlertAction(type: .destructiveAction, title: "退出当前账号", action: {
+                                    let _ = logoutFromAccount(id: strongSelf.context.account.id, accountManager: strongSelf.context.sharedContext.accountManager, alreadyLoggedOutRemotely: false).startStandalone()
+                                })
+                            ]), in: .window(.root))
+                            return false
                         }
                         
                         controller.present(textAlertController(context: strongSelf.context, title: strongSelf.presentationData.strings.ForcedPasswordSetup_Intro_DismissTitle, text: strongSelf.presentationData.strings.ForcedPasswordSetup_Intro_DismissText(value), actions: [

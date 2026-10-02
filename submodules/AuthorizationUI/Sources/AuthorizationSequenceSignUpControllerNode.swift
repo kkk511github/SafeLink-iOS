@@ -52,6 +52,10 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
     var registrationInviteCode: String {
         return (self.inviteField.textField.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
     }
+
+    func updateInvitePlaceholder(required: Bool) {
+        self.inviteField.textField.attributedPlaceholder = NSAttributedString(string: required ? "邀请码（必填）" : "邀请码（选填）", font: self.inviteField.textField.font, textColor: self.theme.list.itemPlaceholderTextColor)
+    }
     
     var currentPhoto: UIImage? = nil {
         didSet {

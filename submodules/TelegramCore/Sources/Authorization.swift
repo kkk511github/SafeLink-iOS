@@ -15,6 +15,19 @@ public enum AuthorizationCodeRequestError {
     case appOutdated
 }
 
+public func registrationInviteRequired(account: UnauthorizedAccount) -> Signal<Bool?, NoError> {
+    return account.network.request(Api.functions.help.getAppConfig(hash: 0))
+    |> map { result -> Bool? in
+        guard case let .appConfig(config) = result, let data = JSON(apiJson: config.config) else {
+            return nil
+        }
+        return data["safelink_registration_invite_required"] as? Bool ?? false
+    }
+    |> `catch` { _ -> Signal<Bool?, NoError> in
+        return .single(nil)
+    }
+}
+
 func switchToAuthorizedAccount(transaction: AccountManagerModifier<TelegramAccountManagerTypes>, account: UnauthorizedAccount, isSupportUser: Bool) {
     let nextSortOrder = (transaction.getRecords().map({ record -> Int32 in
         for attribute in record.attributes {
