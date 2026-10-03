@@ -2030,6 +2030,16 @@ public struct StarsSubscriptionConfiguration {
     }
 }
 
+public extension AccountContext {
+    var safeLinkPublicPrefix: String {
+        return safeLinkPublicLinkPrefix(self.currentAppConfiguration.with { $0.data?["safelink_public_link_prefix"] as? String })
+    }
+
+    func safeLinkPublicURL(_ path: String) -> String {
+        return safeLinkPublicLink(path, prefix: self.safeLinkPublicPrefix)
+    }
+}
+
 public struct TranslationConfiguration {
     static var defaultValue: TranslationConfiguration {
         return TranslationConfiguration(manual: .disabled, auto: .disabled)

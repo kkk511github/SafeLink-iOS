@@ -569,7 +569,7 @@ func infoItems(
                 threadId = message.threadId
             }
             
-            let linkText = "https://t.me/\(mainUsername)/\(threadId)"
+            let linkText = context.safeLinkPublicURL("\(mainUsername)/\(threadId)")
             
             items[currentPeerInfoSection]!.append(
                 PeerInfoScreenLabeledValueItem(
@@ -627,7 +627,7 @@ func infoItems(
                     PeerInfoScreenLabeledValueItem(
                         id: ItemUsername,
                         label: presentationData.strings.Channel_LinkItem,
-                        text: "https://t.me/\(mainUsername)",
+                        text: context.safeLinkPublicURL(mainUsername),
                         additionalText: additionalUsernames,
                         textColor: .accent,
                         icon: .qrCode,

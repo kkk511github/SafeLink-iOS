@@ -445,7 +445,7 @@ final class BusinessLinksSetupScreenComponent: Component {
                     style: .glass,
                     header: nil,
                     footer: footerText.isEmpty ? nil : AnyComponent(MultilineTextComponent(
-                        text: .markdown(text: footerText, attributes: MarkdownAttributes(
+                        text: .markdown(text: safeLinkPublicLinkFooter(footerText, prefix: component.context.safeLinkPublicPrefix), attributes: MarkdownAttributes(
                             body: MarkdownAttributeSet(font: Font.regular(15.0), textColor: environment.theme.list.freeTextColor),
                             bold: MarkdownAttributeSet(font: Font.semibold(15.0), textColor: environment.theme.list.freeTextColor),
                             link: MarkdownAttributeSet(font: Font.regular(15.0), textColor: environment.theme.list.itemAccentColor),
@@ -473,9 +473,9 @@ final class BusinessLinksSetupScreenComponent: Component {
                             
                             let linkValue: String
                             if url == "phone", let phoneNumber = component.initialData.accountPeer?.phone {
-                                linkValue = "t.me/+\(phoneNumber)"
+                                linkValue = component.context.safeLinkPublicURL("+\(phoneNumber)")
                             } else if url == "username", let addressName = component.initialData.accountPeer?.addressName {
-                                linkValue = "t.me/\(addressName)"
+                                linkValue = component.context.safeLinkPublicURL(addressName)
                             } else {
                                 return
                             }
